@@ -66,6 +66,20 @@ for (const page of ['src/popup.html', 'src/options.html']) {
     });
 }
 
+// --------------------------------------------------- README download name ----
+
+// The install steps quote a concrete filename; keep it pinned to the manifest
+// version so a release never ships docs pointing at the previous zip.
+const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+const named = [...readme.matchAll(/wtrl-zrl-team-report-v([0-9][^\s`)]*)\.zip/g)].map((m) => m[1]);
+const stale = [...new Set(named)].filter((v) => v !== manifest.version);
+if (stale.length) {
+  errors.push(
+    `README.md references wtrl-zrl-team-report-v${stale.join('/v')}.zip but the ` +
+      `manifest version is ${manifest.version} — run "npm run set-version ${manifest.version}"`
+  );
+}
+
 // ------------------------------------------------------------ JS syntax ----
 
 function jsFiles(dir) {
