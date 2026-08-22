@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WTRL Team Report — Settings</title>
+    <link rel="stylesheet" href="pages.css" />
+    <style>
+      body { max-width: 680px; margin: 0 auto; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="../icons/icon48.png" alt="" />
+      <h1>WTRL Team Report — Settings</h1>
+    </header>
+
+    <main>
+      <fieldset>
+        <legend>Coalition team app</legend>
+        <p class="note">
+          Optional. Set an API key here to push reports straight to
+          app.coalitionracing.com instead of downloading them. The key is stored in
+          extension storage and is only ever read by the background worker — it is
+          never exposed to wtrl.racing.
+        </p>
+
+        <label class="field">
+          Base URL
+          <input type="url" id="apiBaseUrl" placeholder="https://app.coalitionracing.com" />
+          <span class="hint">Origin of the team app.</span>
+        </label>
+
+        <label class="field">
+          Endpoint path
+          <input type="text" id="apiPath" placeholder="/api/wtrl/team-report" />
+          <span class="hint">Receives a POST with the full report JSON as the body.</span>
+        </label>
+
+        <label class="field">
+          API key
+          <input type="password" id="apiKey" placeholder="paste your key" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          Auth header
+          <select id="authScheme">
+            <option value="bearer">Authorization: Bearer &lt;key&gt;</option>
+            <option value="x-api-key">X-API-Key: &lt;key&gt;</option>
+          </select>
+        </label>
+
+        <label class="check">
+          <input type="checkbox" id="autoUpload" /> Send automatically after each report
+        </label>
+
+        <div class="actions">
+          <button class="primary" id="save">Save</button>
+          <button id="connect">Connect (grant access)</button>
+          <button id="test">Test connection</button>
+        </div>
+
+        <div class="note" id="apiStatus" hidden></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>WTRL endpoint</legend>
+        <p class="note">
+          Learned automatically the first time you build a report — the extension
+          watches the request the site makes when a team panel is opened, then
+          reuses it for the remaining teams. Only change this if you know the URL.
+        </p>
+        <label class="field">
+          Endpoint template
+          <input type="text" id="endpointTemplate" placeholder="not learned yet" />
+          <span class="hint">Use <code>{trc}</code> and <code>{season}</code> as placeholders.</span>
+        </label>
+        <div class="actions">
+          <button id="saveTemplate">Save template</button>
+          <button id="clearTemplate">Forget template</button>
+        </div>
+        <div class="note" id="templateStatus" hidden></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Data</legend>
+        <p class="note">The most recent report is kept locally so the popup can re-download it.</p>
+        <div class="actions">
+          <button id="clearReport">Clear stored report</button>
+        </div>
+      </fieldset>
+    </main>
+
+    <footer>
+      <span id="version"></span>
+      <span>WTRL ZRL Team Report</span>
+    </footer>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

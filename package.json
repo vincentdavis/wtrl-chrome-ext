@@ -1,0 +1,20 @@
+{
+  "name": "wtrl-zrl-team-report",
+  "version": "0.1.0",
+  "description": "Chrome extension that collects every rider from all of your WTRL ZRL teams into one report.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test 'test/**/*.test.mjs'",
+    "validate": "node scripts/validate.mjs",
+    "check": "npm run validate && npm test",
+    "build": "npm run check && node scripts/build.mjs",
+    "icons": "python3 scripts/make-icons.py",
+    "set-version": "node scripts/set-version.mjs",
+    "mock": "node test/mock/server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

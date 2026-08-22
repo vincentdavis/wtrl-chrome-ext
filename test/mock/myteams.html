@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Mock WTRL — My Teams</title>
+    <style>
+      body { font-family: -apple-system, sans-serif; background: #f5f6f8; margin: 0; padding: 32px; }
+      h1 { font-size: 20px; }
+      .panel { background: #fff; border: 1px solid #ddd; border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
+      .panel-heading { padding: 12px 14px; cursor: pointer; display: flex; }
+      .panel-heading:hover { background: #fafafa; }
+      .z-header { display: flex; align-items: center; gap: 10px; width: 100%; }
+      .z-title { font-weight: 600; }
+      .z-actions { margin-left: auto; }
+      .collapse { display: none; }
+      .collapse.in { display: block; }
+      .panel-body { padding: 12px 14px; border-top: 1px solid #eee; font-size: 13px; }
+      table { border-collapse: collapse; width: 100%; }
+      td, th { border-bottom: 1px solid #eee; padding: 4px 6px; text-align: left; }
+      #harness { margin-top: 28px; padding: 12px; background: #fff; border: 1px dashed #bbb; border-radius: 6px; font: 12px ui-monospace, monospace; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>My Teams (mock)</h1>
+
+    <div class="accordion" id="teamManagement">
+      <div class="panel" id="trc76720">
+        <div class="panel-heading zrl-r1" id="heading76720" data-toggle="collapse" data-target="#collapse76720" aria-expanded="false" aria-controls="collapse76720">
+          <div class="z-header">
+            <span class="z-title">COALITION ANNIHILATION</span>
+            <div class="z-actions"><button type="button" class="racepass">RacePass™</button></div>
+          </div>
+        </div>
+        <div id="collapse76720" class="collapse" aria-labelledby="heading76720">
+          <div class="panel-body" data-trc="76720" data-season="20" data-loading="0">
+            <div class="skeleton">Loading team details…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel" id="trc76637">
+        <div class="panel-heading zrl-r1" id="heading76637" data-toggle="collapse" data-target="#collapse76637" aria-expanded="false" aria-controls="collapse76637">
+          <div class="z-header">
+            <span class="z-title">COALITION DELUSION</span>
+            <div class="z-actions"><button type="button" class="racepass">RacePass™</button></div>
+          </div>
+        </div>
+        <div id="collapse76637" class="collapse" aria-labelledby="heading76637">
+          <div class="panel-body" data-trc="76637" data-season="20" data-loading="0">
+            <div class="skeleton">Loading team details…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="harness">harness: waiting…</div>
+
+    <!-- Stand-in for the WTRL page's own accordion + lazy-load behaviour. -->
+    <script>
+      document.querySelectorAll('.panel-heading').forEach((heading) => {
+        heading.addEventListener('click', async () => {
+          const target = document.querySelector(heading.dataset.target);
+          const open = target.classList.contains('in');
+          target.classList.toggle('in', !open);
+          heading.setAttribute('aria-expanded', String(!open));
+          if (open) return;
+
+          const body = target.querySelector('.panel-body');
+          const { trc, season } = body.dataset;
+          body.innerHTML = '<div class="skeleton">Loading team details…</div>';
+
+          const response = await fetch(`/zrl/api/v3/teamdetail?trc=${trc}&season=${season}`);
+          const data = await response.json();
+          body.dataset.loading = '1';
+          body.innerHTML =
+            '<table><tr><th>Rider</th><th>Cat</th><th>Status</th></tr>' +
+            data.riders
+              .map((r) => `<tr><td>${r.name}</td><td>${r.category}</td><td>${r.memberStatus}</td></tr>`)
+              .join('') +
+            '</table>';
+        });
+      });
+    </script>
+
+    <!-- Minimal chrome.* shim so the real extension sources run unmodified. -->
+    <script>
+      const mockStore = {};
+      window.chrome = {
+        runtime: {
+          getManifest: () => ({ version: '0.1.0-mock' }),
+          getURL: (p) => '/' + p,
+          onMessage: { addListener() {} },
+          sendMessage: async (message) => {
+            window.__lastExtensionMessage = message;
+            if (message.type === 'store-report') {
+              window.__storedReport = message.report;
+              return { ok: true };
+            }
+            if (message.type === 'download') {
+              window.__lastDownload = message;
+              return { ok: true, downloadId: 1 };
+            }
+            if (message.type === 'upload') {
+              return { ok: false, error: 'mock: uploads disabled' };
+            }
+            return { ok: true };
+          }
+        },
+        storage: {
+          local: {
+            get: async (keys) => {
+              const out = {};
+              (Array.isArray(keys) ? keys : [keys]).forEach((k) => {
+                if (k in mockStore) out[k] = mockStore[k];
+              });
+              return out;
+            },
+            set: async (patch) => Object.assign(mockStore, patch),
+            remove: async (key) => { delete mockStore[key]; }
+          }
+        }
+      };
+      window.__mockStore = mockStore;
+    </script>
+
+    <script src="/src/interceptor.js"></script>
+    <script src="/src/report-format.js"></script>
+    <script src="/src/content.js"></script>
+  </body>
+</html>

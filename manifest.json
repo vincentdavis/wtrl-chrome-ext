@@ -1,0 +1,71 @@
+{
+  "manifest_version": 3,
+  "name": "WTRL ZRL Team Report",
+  "short_name": "WTRL Report",
+  "version": "0.1.0",
+  "description": "Collect every rider from all of your WTRL ZRL teams into one JSON/CSV report, and push it to the Coalition team app.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://www.wtrl.racing/*",
+    "https://wtrl.racing/*"
+  ],
+  "optional_host_permissions": [
+    "https://app.coalitionracing.com/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.wtrl.racing/zrl/*",
+        "https://wtrl.racing/zrl/*"
+      ],
+      "js": [
+        "src/interceptor.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://www.wtrl.racing/zrl/*",
+        "https://wtrl.racing/zrl/*"
+      ],
+      "js": [
+        "src/report-format.js",
+        "src/content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "WTRL ZRL Team Report"
+  },
+  "options_page": "src/options.html",
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "src/content.css"
+      ],
+      "matches": [
+        "https://www.wtrl.racing/*",
+        "https://wtrl.racing/*"
+      ]
+    }
+  ]
+}

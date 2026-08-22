@@ -1,0 +1,15 @@
+{
+  "meta": {
+    "trc": 76637,
+    "division": "Open Orange League C",
+    "racingSeason": "2026/27",
+    "team": { "tttid": 8791, "teamid": 8791, "name": "COALITION DELUSION" },
+    "competition": { "wtrlid": "ZRL", "season": 20, "sportsYear": 2026, "roundnumber": 1, "division": "C", "class": "2250C0", "status": "REGISTERED" },
+    "memberCount": 2
+  },
+  "permissions": { "id": 87402, "isAdmin": true },
+  "riders": [
+    { "tmuid": 460001, "name": "Rider, With \"Comma\"", "memberStatus": "MEMBER", "signedup": true, "category": "C", "zftp": 3.0, "zftpw": 240, "zmapw": 280, "zmap": 3.5, "riderpoints": 12, "teams": 2, "appearancesRound": 1, "appearancesSeason": 3, "profileId": 87402, "userId": "f89f1b78-9c4f-4dff-bd6a-cf1be7082e2c" },
+    { "tmuid": 460002, "name": "Second Rider", "memberStatus": "INVITED", "signedup": false, "category": "D", "zftp": 2.5, "zftpw": 190, "zmapw": 220, "zmap": 2.9, "riderpoints": 0, "teams": 1, "appearancesRound": 0, "appearancesSeason": 0, "profileId": 999111, "userId": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" }
+  ]
+}

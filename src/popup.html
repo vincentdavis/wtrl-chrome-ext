@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WTRL ZRL Team Report</title>
+    <link rel="stylesheet" href="pages.css" />
+    <style>
+      body { width: 340px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <img src="../icons/icon48.png" alt="" />
+      <h1>WTRL Team Report</h1>
+    </header>
+
+    <main>
+      <div class="note" id="status">Checking this tab…</div>
+
+      <div class="actions">
+        <button class="primary" id="run" disabled>Build report</button>
+        <button id="open">Open My Teams</button>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="includeStats" /> Include rider stats
+      </label>
+
+      <section id="last" hidden>
+        <h2>Last report</h2>
+        <div class="stat-row">
+          <div class="stat"><div class="value" id="teamCount">0</div><div class="label">Teams</div></div>
+          <div class="stat"><div class="value" id="riderCount">0</div><div class="label">Riders</div></div>
+        </div>
+        <p class="note" id="generatedAt"></p>
+        <div class="actions">
+          <button id="json">JSON</button>
+          <button id="csv">CSV</button>
+          <button id="copy">Copy</button>
+          <button id="send">Send</button>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span id="version"></span>
+      <button id="options" style="padding:2px 8px;font-size:12px;">Settings</button>
+    </footer>
+
+    <script src="report-format.js"></script>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

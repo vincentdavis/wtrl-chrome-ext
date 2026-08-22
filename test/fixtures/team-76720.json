@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "trc": 76720,
+    "division": "Open Orange League B",
+    "racingSeason": "2026/27",
+    "team": {
+      "tttid": 8783,
+      "teamid": 8783,
+      "name": "COALITION ANNIHILATION",
+      "jerseyname": "The Coalition",
+      "jerseyimage": "TheCoalition2023_thumb",
+      "recruiting": false,
+      "isdev": false
+    },
+    "nextRace": { "teamstart": null, "raceFormat": "" },
+    "competition": {
+      "wtrlid": "ZRL",
+      "season": 20,
+      "sportsYear": 2026,
+      "roundnumber": 1,
+      "division": "B",
+      "class": "2250B0",
+      "status": "REGISTERED",
+      "registered": ["1", "2", "3", "4"]
+    },
+    "memberCount": 6,
+    "membersRemaining": 4,
+    "administrators": {
+      "registerer": { "firstName": "Neil", "lastName": "Allonby", "profileId": 40824, "userId": "bafbe1b3-db60-4867-92c4-da849e767912" },
+      "captain": { "firstName": "Dan", "lastName": "Klopfer", "profileId": 1562251, "userId": "3dca21ea-a55a-4df9-b9bb-c3a9f399a6df" },
+      "managers": []
+    }
+  },
+  "permissions": { "id": 87402, "isAdmin": true },
+  "riders": [
+    { "tmuid": 457469, "name": "Chad D. Peddicord", "avatar": "https://static-cdn.zwift.com/prod/profile/e253d774-2963866", "memberStatus": "MEMBER", "signedup": false, "category": "B", "zftp": 3.560000000000000053290705182007513940334320068359375, "zftpw": 265, "zmapw": 300, "zmap": 4.03000000000000024868995751603506505489349365234375, "riderpoints": 0, "teams": 0, "appearancesRound": 0, "appearancesSeason": 0, "profileId": 38810, "userId": "798c9567-d1cf-4afb-b382-e269d80ad37c" },
+    { "tmuid": 456946, "name": "Dan Klopfer", "avatar": "https://static-cdn.zwift.com/prod/profile/52830f81-829593", "memberStatus": "MEMBER", "signedup": false, "category": "B", "zftp": 3.729999999999999982236431605997495353221893310546875, "zftpw": 276, "zmapw": 315, "zmap": 4.2599999999999997868371792719699442386627197265625, "riderpoints": 0, "teams": 0, "appearancesRound": 0, "appearancesSeason": 0, "profileId": 1562251, "userId": "3dca21ea-a55a-4df9-b9bb-c3a9f399a6df" },
+    { "tmuid": 456948, "name": "Kyle Maloney", "avatar": "https://static-cdn.zwift.com/prod/profile/855c602e-3123481", "memberStatus": "MEMBER", "signedup": false, "category": "C", "zftp": 3.339999999999999857891452847979962825775146484375, "zftpw": 276, "zmapw": 336, "zmap": 4.07000000000000028421709430404007434844970703125, "riderpoints": 0, "teams": 0, "appearancesRound": 0, "appearancesSeason": 0, "profileId": 6934646, "userId": "040ab321-286e-41e5-b8a8-217856e2e534" },
+    { "tmuid": 457832, "name": "matt jago", "avatar": "https://static-cdn.zwift.com/prod/profile/e104121b-2896622", "memberStatus": "MEMBER", "signedup": false, "category": "B", "zftp": 3.479999999999999982236431605997495353221893310546875, "zftpw": 246, "zmapw": 294, "zmap": 4.160000000000000142108547152020037174224853515625, "riderpoints": 0, "teams": 0, "appearancesRound": 0, "appearancesSeason": 0, "profileId": 4772429, "userId": "9c13b292-e425-464d-b418-5bc68b1400d9" },
+    { "tmuid": 456947, "name": "Neil Allonby", "avatar": "https://static-cdn.zwift.com/prod/profile/047be6eb-38038", "memberStatus": "MEMBER", "signedup": false, "category": "B", "zftp": 3.569999999999999840127884453977458178997039794921875, "zftpw": 281, "zmapw": 302, "zmap": 3.8300000000000000710542735760100185871124267578125, "riderpoints": 0, "teams": 0, "appearancesRound": 0, "appearancesSeason": 0, "profileId": 40824, "userId": "bafbe1b3-db60-4867-92c4-da849e767912" },
+    { "tmuid": 456949, "name": "Greg Morgan", "avatar": "/uploads/profile_picture/1623974952_IMG_3034.jpg", "memberStatus": "INVITED", "signedup": false, "category": "B", "zftp": 3.660000000000000142108547152020037174224853515625, "zftpw": 289, "zmapw": 315, "zmap": 3.979999999999999982236431605997495353221893310546875, "riderpoints": 0, "teams": 0, "appearancesRound": 0, "appearancesSeason": 0, "profileId": 1525003, "userId": "ee03b41d-3b7c-45cf-a087-14833466d594" }
+  ]
+}
