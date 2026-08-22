@@ -1,6 +1,6 @@
 {
   "name": "wtrl-zrl-team-report",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Chrome extension that collects every rider from all of your WTRL ZRL teams into one report.",
   "private": true,
   "type": "module",

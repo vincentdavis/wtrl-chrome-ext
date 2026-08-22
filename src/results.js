@@ -44,16 +44,20 @@ const state = {
 
 async function load() {
   $('version').textContent = 'v' + chrome.runtime.getManifest().version;
+  await loadReport();
+}
 
+/** Read the stored report and render it, preserving any active filters. */
+async function loadReport() {
   const stored = await chrome.storage.local.get(['lastReport']);
   const entry = stored.lastReport;
-  if (!entry || !entry.report || !(entry.report.riders || []).length) {
-    $('empty').hidden = false;
-    document.querySelector('.tiles').hidden = true;
-    document.querySelector('.toolbar').hidden = true;
-    document.querySelector('.table-wrap').hidden = true;
-    return;
-  }
+
+  const hasReport = !!(entry && entry.report && (entry.report.riders || []).length);
+  $('empty').hidden = hasReport;
+  document.querySelector('.tiles').hidden = !hasReport;
+  document.querySelector('.toolbar').hidden = !hasReport;
+  document.querySelector('.table-wrap').hidden = !hasReport;
+  if (!hasReport) return false;
 
   state.report = entry.report;
   state.multiTeam = WTRLFormat.multiTeamZwids(state.report);
@@ -62,22 +66,24 @@ async function load() {
     'built ' + new Date(state.report.generatedAt).toLocaleString();
 
   const failures = state.report.failures || [];
+  $('partial').hidden = !failures.length;
   if (failures.length) {
-    $('partial').hidden = false;
     $('partial').textContent =
       `Partial report — ${failures.length} team(s) could not be read: ` +
       failures.map((f) => `${f.teamName} (${f.error})`).join('; ') +
-      '. Rebuild to include them.';
+      '. Refresh to try again.';
   }
 
   buildTeamFilter();
   renderTiles();
   renderHead();
   render();
+  return true;
 }
 
 function buildTeamFilter() {
   const select = $('teamFilter');
+  const previous = state.filters.team;
   select.innerHTML = '<option value="">All teams</option>';
   (state.report.teams || []).forEach((team) => {
     const option = document.createElement('option');
@@ -85,6 +91,13 @@ function buildTeamFilter() {
     option.textContent = `${team.teamName} (${team.riders.length})`;
     select.appendChild(option);
   });
+  // Keep the chosen team selected across a refresh if it still exists.
+  if (previous && select.querySelector(`option[value="${previous}"]`)) {
+    select.value = previous;
+  } else {
+    state.filters.team = '';
+    select.value = '';
+  }
 }
 
 // =================================================================== tiles ===
@@ -383,17 +396,97 @@ $('exportCsv').addEventListener('click', () => {
   );
 });
 
-$('exportJson').addEventListener('click', () => {
-  if (!state.report) return;
-  download(
-    WTRLFormat.downloadName(state.report, 'json'),
-    'application/json',
-    JSON.stringify(state.report, null, 2)
-  );
-});
+// ================================================================= refresh ===
 
-$('openTeams').addEventListener('click', () => {
-  chrome.tabs.create({ url: MYTEAMS_URL });
-});
+const MYTEAMS_PATTERNS = [
+  'https://www.wtrl.racing/zrl/myteams*',
+  'https://wtrl.racing/zrl/myteams*'
+];
+
+function setRefreshStatus(text, tone) {
+  const el = $('refreshStatus');
+  if (!text) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  el.className = 'note' + (tone ? ' ' + tone : '');
+  el.textContent = text;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Wait until the content script on `tabId` answers, i.e. the page is usable. */
+async function waitForContentScript(tabId, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const pong = await chrome.tabs.sendMessage(tabId, { type: 'ping' });
+      if (pong && pong.ok && pong.teams) return true;
+    } catch (_) {
+      // Content script not injected yet — keep waiting.
+    }
+    await sleep(500);
+  }
+  return false;
+}
+
+async function refresh() {
+  const button = $('refresh');
+  if (button.disabled) return;
+  button.disabled = true;
+
+  let openedTab = null;
+  try {
+    setRefreshStatus('Looking for your WTRL My Teams tab…');
+    const existing = await chrome.tabs.query({ url: MYTEAMS_PATTERNS });
+    let tab = existing[0] || null;
+
+    if (!tab) {
+      setRefreshStatus('Opening WTRL My Teams in the background…');
+      // Opened inactive so the user keeps looking at the table.
+      tab = await chrome.tabs.create({ url: MYTEAMS_URL, active: false });
+      openedTab = tab;
+    }
+
+    setRefreshStatus('Waiting for the page to be ready…');
+    if (!(await waitForContentScript(tab.id))) {
+      setRefreshStatus(
+        'Could not reach the My Teams page. Make sure you are signed in to WTRL, then try again.',
+        'error'
+      );
+      return;
+    }
+
+    setRefreshStatus('Rebuilding — reading each team in turn. This can take a moment…');
+    const result = await chrome.tabs.sendMessage(tab.id, { type: 'run-report' });
+
+    if (!result || !result.ok) {
+      setRefreshStatus((result && result.error) || 'Rebuild failed.', 'error');
+      return;
+    }
+
+    await loadReport();
+    syncControls();
+    const failed = (result.report.failures || []).length;
+    setRefreshStatus(
+      `Refreshed — ${result.report.teamCount} teams, ${result.report.riderCount} riders` +
+        (failed ? `, ${failed} team(s) failed.` : '.'),
+      failed ? 'warn' : 'ok'
+    );
+  } catch (error) {
+    setRefreshStatus('Refresh failed: ' + (error && error.message ? error.message : error), 'error');
+  } finally {
+    button.disabled = false;
+    // Only clean up a tab we opened ourselves.
+    if (openedTab) {
+      try {
+        await chrome.tabs.remove(openedTab.id);
+      } catch (_) {}
+    }
+  }
+}
+
+$('refresh').addEventListener('click', refresh);
 
 load();

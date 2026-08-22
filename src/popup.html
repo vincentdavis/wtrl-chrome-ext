@@ -18,13 +18,10 @@
       <div class="note" id="status">Checking this tab…</div>
 
       <div class="actions">
-        <button class="primary" id="run" disabled>Build report</button>
+        <button class="primary" id="table">Open report</button>
+        <button id="run" disabled>Rebuild</button>
         <button id="open">Open My Teams</button>
       </div>
-
-      <label class="check">
-        <input type="checkbox" id="includeStats" /> Include rider stats
-      </label>
 
       <section id="last" hidden>
         <h2>Last report</h2>
@@ -33,12 +30,20 @@
           <div class="stat"><div class="value" id="riderCount">0</div><div class="label">Riders</div></div>
         </div>
         <p class="note" id="generatedAt"></p>
+
+        <h2>Export</h2>
+        <label class="check">
+          <input type="checkbox" id="includeStats" /> Include rider stats
+        </label>
+        <p class="hint-line">
+          Adds category, zFTP, zMAP, points and race counts to exports. The report
+          table always shows them.
+        </p>
         <div class="actions">
-          <button class="primary" id="table">Open table</button>
           <button id="json">JSON</button>
           <button id="csv">CSV</button>
           <button id="copy">Copy</button>
-          <button id="send">Send</button>
+          <button id="send">Send to Coalition</button>
         </div>
       </section>
     </main>

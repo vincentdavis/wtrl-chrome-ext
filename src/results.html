@@ -12,9 +12,10 @@
       <h1>Team Report</h1>
       <span class="meta" id="generatedAt"></span>
       <div class="header-actions">
-        <button id="exportCsv" title="Export the rows currently shown">Export view (CSV)</button>
-        <button id="exportJson">Export all (JSON)</button>
-        <button id="openTeams" class="primary">Rebuild on WTRL</button>
+        <button id="exportCsv" title="Export the rows currently shown, filters and sort included">
+          Export view (CSV)
+        </button>
+        <button id="refresh" class="primary" title="Re-read every team from WTRL">Refresh</button>
       </div>
     </header>
 
@@ -24,6 +25,7 @@
       </div>
 
       <div class="note warn" id="partial" hidden></div>
+      <div class="note" id="refreshStatus" hidden></div>
 
       <!-- Clicking a tile applies it as a filter. -->
       <section class="tiles" id="tiles"></section>
@@ -76,7 +78,7 @@
 
     <footer>
       <span id="version"></span>
-      <span>zwid links open ZwiftPower in a new tab</span>
+      <span>zwid links open ZwiftPower · JSON/CSV exports live in the toolbar popup</span>
     </footer>
 
     <script src="report-format.js"></script>

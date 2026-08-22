@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.2.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.3.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -29,21 +29,23 @@ unpacked extensions.
 
 1. Go to <https://www.wtrl.racing/zrl/myteams/> and sign in.
 2. Click the red **Report** button in the bottom-right corner.
-3. Press **Build report**.
 
-The panel walks your teams one at a time and shows progress. When it finishes,
-**Open table** gives you the full roster view, or you can **Copy JSON**,
-**Download JSON**, **Download CSV**, or **Send to Coalition**. The extension's
-toolbar popup does the same thing and keeps the last report so you can come back
-to it later.
+That's the whole flow. The button opens your report. If you haven't built one
+yet it builds it first — showing progress as it reads each team — then opens it
+as soon as it's ready.
 
-Tick **Include rider stats** to keep category, zFTP, zMAP, points and appearances
-in the JSON/CSV export. (The table always has them — the toggle only changes what
-gets exported.)
+Everything else lives in the **toolbar popup** (the extension icon next to the
+address bar): JSON and CSV export, copy to clipboard, and Send to Coalition.
 
-## Table view
+| Where | What you get |
+| ----- | ------------ |
+| **Report** button on the page | Opens the report; builds it first if there isn't one |
+| **Report** table → *Refresh* | Re-reads every team from WTRL |
+| **Toolbar popup** | Open report, rebuild, and all exports (JSON / CSV / copy / send) |
 
-**Open table** opens the whole roster in one sortable, filterable table.
+## The report
+
+The report is a sortable, filterable table of every rider across all your teams.
 
 - **Grouped by team** by default, with each team's division and counts in its
   header row. Untick to get one flat list with a Team column.
@@ -61,11 +63,19 @@ gets exported.)
   `zwid`, so it catches the same person across different teams.
 - Pending invites are tinted amber and flagged in each team's header.
 - **zwid** links out to that rider's ZwiftPower profile.
+- **Refresh** re-reads every team from WTRL without leaving the table. It reuses
+  an open My Teams tab, or quietly opens one in the background and closes it
+  again afterwards. Your filters and sort survive the refresh.
 - **Export view (CSV)** saves exactly the rows you are looking at, filters and
-  sort included — handy for chasing a specific group.
+  sort included — handy for chasing a specific group. Whole-report JSON and CSV
+  live in the toolbar popup.
 
 A partial report (some team failed to load) shows a banner naming the teams that
 are missing, so the table is never quietly incomplete.
+
+Tick **Include rider stats** in the popup to keep category, zFTP, zMAP, points
+and race counts in the JSON/CSV export. The table always shows them — the toggle
+only changes what gets exported.
 
 ## Output
 
@@ -234,8 +244,8 @@ step is needed to run it.
 | `src/report-format.js`  | Pure report shaping + CSV — shared, and unit-tested             |
 | `src/background.js`     | Service worker: downloads, upload, API key custody              |
 | `src/settings.js`       | Settings schema shared by the worker, popup and options page    |
-| `src/results.*`         | Table view: search, filter, sort, group by team                 |
-| `src/popup.*`           | Toolbar popup                                                   |
+| `src/results.*`         | The report table: search, filter, sort, group, refresh          |
+| `src/popup.*`           | Toolbar popup: open/rebuild plus every export                   |
 | `src/options.*`         | Settings page                                                   |
 | `scripts/build.mjs`     | Dependency-free, reproducible ZIP packer                        |
 | `scripts/validate.mjs`  | Manifest/HTML reference checks + JS parse checks                |
@@ -262,12 +272,16 @@ Every other push uploads the same zip as a build artifact.
 <https://www.wtrl.racing/zrl/myteams/> and signed in. If the page is still
 loading the accordion, wait a moment and press **Build report** again.
 
-**A team times out.** Open **Activity log** in the panel. If direct fetches are
-failing, go to Settings → **Forget template** and run the report again to
-relearn the endpoint.
+**A team times out.** Open **Activity log** in the build panel. If direct fetches
+are failing, go to Settings → **Forget template** and rebuild to relearn the
+endpoint.
 
 **The Report button is missing.** Reload the page. The button is injected once
 the team accordion appears.
+
+**Refresh says it can't reach the My Teams page.** It needs a signed-in WTRL
+session. Open <https://www.wtrl.racing/zrl/myteams/>, confirm your teams are
+listed, then refresh again.
 
 **Race counts are all zero.** WTRL reports `appearancesRound` and
 `appearancesSeason`; both are 0 before a season's racing starts.

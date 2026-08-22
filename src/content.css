@@ -65,6 +65,12 @@
   transform: translateY(0);
 }
 
+.wr-launcher:disabled {
+  opacity: 0.65;
+  cursor: default;
+  transform: none;
+}
+
 .wr-launcher-dot {
   width: 8px;
   height: 8px;
@@ -76,7 +82,7 @@
 /* ---------------------------------------------------------------- panel --- */
 
 .wr-panel {
-  width: 460px;
+  width: 380px;
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - 120px);
   display: flex;
@@ -130,12 +136,6 @@
   gap: 14px;
 }
 
-.wr-intro {
-  margin: 0;
-  color: var(--wr-muted);
-  font-size: 13px;
-}
-
 .wr-panel-foot {
   display: flex;
   align-items: center;
@@ -148,22 +148,6 @@
 }
 
 /* -------------------------------------------------------------- controls --- */
-
-.wr-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--wr-text);
-  cursor: pointer;
-}
-
-.wr-check input {
-  accent-color: var(--wr-accent);
-  width: 15px;
-  height: 15px;
-  margin: 0;
-}
 
 .wr-actions {
   display: flex;
@@ -224,7 +208,7 @@
 
 .wr-progress[hidden],
 .wr-summary[hidden],
-.wr-results[hidden] {
+.wr-actions[hidden] {
   display: none;
 }
 
@@ -270,29 +254,6 @@
 .wr-summary.wr-error {
   border-color: rgba(230, 57, 70, 0.5);
   color: var(--wr-accent-soft);
-}
-
-/* --------------------------------------------------------------- results --- */
-
-.wr-results {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.wr-preview {
-  margin: 0;
-  max-height: 240px;
-  overflow: auto;
-  padding: 10px;
-  border-radius: 8px;
-  background: #0f1216;
-  border: 1px solid var(--wr-line);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 11px;
-  line-height: 1.5;
-  color: #c8d0dc;
-  white-space: pre;
 }
 
 /* ------------------------------------------------------------------- log --- */

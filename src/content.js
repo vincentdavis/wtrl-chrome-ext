@@ -28,8 +28,7 @@
     waiters: new Map(), // trc -> resolve fn
     pendingFetches: new Map(), // request id -> resolve fn
     running: false,
-    lastReport: null,
-    includeStats: false
+    lastReport: null
   };
 
   // ===========================================================================
@@ -206,6 +205,10 @@
   // UI
   // ===========================================================================
 
+  // The on-page control is a shortcut to the report table, not a workbench:
+  // it opens the table, building one first if none exists yet. Exports live in
+  // the toolbar popup, and rebuilding lives in the table itself.
+
   let ui = null;
 
   function log(message) {
@@ -232,7 +235,7 @@
     const wrap = document.createElement('div');
     wrap.className = 'wr-wrap';
     wrap.innerHTML = `
-      <button class="wr-launcher" type="button" title="Build a report of all your teams">
+      <button class="wr-launcher" type="button" title="Open your team report">
         <span class="wr-launcher-dot"></span> Report
       </button>
       <section class="wr-panel" hidden>
@@ -241,27 +244,14 @@
           <button class="wr-close" type="button" aria-label="Close">&times;</button>
         </header>
         <div class="wr-panel-body">
-          <p class="wr-intro">Opens every team on this page and collects its riders into one report.</p>
-          <label class="wr-check">
-            <input type="checkbox" class="wr-stats"> Include rider stats (category, zFTP, zMAP, points)
-          </label>
-          <div class="wr-actions">
-            <button class="wr-run wr-btn wr-btn-primary" type="button">Build report</button>
-          </div>
           <div class="wr-progress" hidden>
             <div class="wr-bar"><div class="wr-bar-fill"></div></div>
             <div class="wr-status">Starting…</div>
           </div>
           <div class="wr-summary" hidden></div>
-          <div class="wr-results" hidden>
-            <div class="wr-actions">
-              <button class="wr-copy wr-btn" type="button">Copy JSON</button>
-              <button class="wr-json wr-btn" type="button">Download JSON</button>
-              <button class="wr-csv wr-btn" type="button">Download CSV</button>
-              <button class="wr-table wr-btn wr-btn-primary" type="button">Open table</button>
-              <button class="wr-send wr-btn" type="button">Send to Coalition</button>
-            </div>
-            <pre class="wr-preview"></pre>
+          <div class="wr-actions" hidden>
+            <button class="wr-open wr-btn wr-btn-primary" type="button">Open report</button>
+            <button class="wr-retry wr-btn" type="button">Try again</button>
           </div>
           <details class="wr-log-wrap">
             <summary>Activity log</summary>
@@ -283,38 +273,31 @@
       wrap,
       panel: $('.wr-panel'),
       launcher: $('.wr-launcher'),
-      runBtn: $('.wr-run'),
-      statsToggle: $('.wr-stats'),
       progress: $('.wr-progress'),
       barFill: $('.wr-bar-fill'),
       statusEl: $('.wr-status'),
       summaryEl: $('.wr-summary'),
-      resultsEl: $('.wr-results'),
-      previewEl: $('.wr-preview'),
+      actionsEl: $('.wr-actions'),
+      openBtn: $('.wr-open'),
+      retryBtn: $('.wr-retry'),
       logEl: $('.wr-log')
     };
 
-    $('.wr-launcher').addEventListener('click', () => {
-      ui.panel.hidden = !ui.panel.hidden;
-    });
+    ui.launcher.addEventListener('click', onLauncherClick);
     $('.wr-close').addEventListener('click', () => {
       ui.panel.hidden = true;
     });
     $('.wr-options').addEventListener('click', () => {
       chrome.runtime.sendMessage({ type: 'open-options' });
     });
-    ui.runBtn.addEventListener('click', () => {
-      run({ includeStats: ui.statsToggle.checked });
-    });
-    $('.wr-table').addEventListener('click', () => {
-      chrome.runtime.sendMessage({ type: 'open-results' });
-    });
-    $('.wr-copy').addEventListener('click', copyReport);
-    $('.wr-json').addEventListener('click', () => downloadReport('json'));
-    $('.wr-csv').addEventListener('click', () => downloadReport('csv'));
-    $('.wr-send').addEventListener('click', sendReport);
+    ui.openBtn.addEventListener('click', openReport);
+    ui.retryBtn.addEventListener('click', () => buildThenOpen());
 
     return ui;
+  }
+
+  function showPanel() {
+    if (ui) ui.panel.hidden = false;
   }
 
   function setProgress(done, total, message) {
@@ -325,22 +308,71 @@
     ui.statusEl.textContent = message;
   }
 
+  function setSummary(text, tone) {
+    if (!ui) return;
+    ui.summaryEl.hidden = false;
+    ui.summaryEl.className = 'wr-summary' + (tone ? ' wr-' + tone : '');
+    ui.summaryEl.textContent = text;
+  }
+
   // ===========================================================================
   // Actions
   // ===========================================================================
 
-  async function run(options = {}) {
+  async function hasStoredReport() {
+    try {
+      const stored = await chrome.storage.local.get(['lastReport']);
+      const entry = stored.lastReport;
+      return !!(entry && entry.report && (entry.report.riders || []).length);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function openReport() {
+    chrome.runtime.sendMessage({ type: 'open-results' });
+  }
+
+  /** Build a report, then show it. Used when nothing has been built yet. */
+  async function buildThenOpen() {
+    showPanel();
+    const result = await run();
+    if (!result || !result.ok) return; // the panel already explains why
+
+    if (ui) ui.actionsEl.hidden = false;
+
+    // A partial report is worth showing, but not worth hiding the warning for.
+    if (!(result.report.failures || []).length) {
+      openReport();
+      setTimeout(() => {
+        if (ui && !state.running) ui.panel.hidden = true;
+      }, 1500);
+    }
+  }
+
+  async function onLauncherClick() {
+    if (state.running) {
+      showPanel();
+      return;
+    }
+    if (await hasStoredReport()) {
+      openReport();
+      return;
+    }
+    await buildThenOpen();
+  }
+
+  async function run() {
     if (state.running) return { ok: false, error: 'A report is already running.' };
 
     const teams = discoverTeams();
     if (!teams.length) {
-      if (ui) {
-        ui.panel.hidden = false;
-        ui.summaryEl.hidden = false;
-        ui.summaryEl.className = 'wr-summary wr-error';
-        ui.summaryEl.textContent =
-          'No teams found on this page. Open https://www.wtrl.racing/zrl/myteams/ and try again.';
-      }
+      showPanel();
+      setSummary(
+        'No teams found on this page. Open https://www.wtrl.racing/zrl/myteams/ and try again.',
+        'error'
+      );
+      if (ui) ui.actionsEl.hidden = true;
       return { ok: false, error: 'No teams found on this page' };
     }
 
@@ -348,9 +380,9 @@
     state.captured.clear();
     if (ui) {
       ui.panel.hidden = false;
-      ui.runBtn.disabled = true;
-      ui.resultsEl.hidden = true;
+      ui.launcher.disabled = true;
       ui.summaryEl.hidden = true;
+      ui.actionsEl.hidden = true;
       ui.logEl.textContent = '';
     }
 
@@ -390,29 +422,24 @@
       }
     } finally {
       state.running = false;
-      if (ui) ui.runBtn.disabled = false;
+      if (ui) ui.launcher.disabled = false;
     }
 
     setProgress(teams.length, teams.length, 'Done.');
 
     const report = WTRLFormat.buildReport(entries, { failures, extensionVersion: VERSION });
     state.lastReport = report;
-    state.includeStats = !!options.includeStats;
 
     try {
       await chrome.runtime.sendMessage({ type: 'store-report', report });
     } catch (_) {}
 
-    if (ui) {
-      ui.summaryEl.hidden = false;
-      ui.summaryEl.className = 'wr-summary' + (failures.length ? ' wr-warn' : ' wr-ok');
-      ui.summaryEl.textContent =
-        `${report.teamCount} team${report.teamCount === 1 ? '' : 's'}, ` +
+    setSummary(
+      `${report.teamCount} team${report.teamCount === 1 ? '' : 's'}, ` +
         `${report.riderCount} rider${report.riderCount === 1 ? '' : 's'}` +
-        (failures.length ? ` — ${failures.length} team(s) failed, see log.` : '.');
-      ui.resultsEl.hidden = false;
-      ui.previewEl.textContent = JSON.stringify(report, null, 2);
-    }
+        (failures.length ? ` — ${failures.length} team(s) failed, see log.` : '.'),
+      failures.length ? 'warn' : 'ok'
+    );
 
     const settings = await chrome.storage.local.get(['autoUpload']);
     if (settings.autoUpload) await sendReport();
@@ -420,76 +447,20 @@
     return { ok: true, report };
   }
 
-  /** The report as the user wants it exported: core fields unless stats are on. */
-  function exportable() {
-    if (!state.lastReport) return null;
-    return state.includeStats ? state.lastReport : WTRLFormat.stripStats(state.lastReport);
-  }
-
-  async function copyReport() {
-    if (!state.lastReport) return;
-    const text = JSON.stringify(exportable(), null, 2);
-    try {
-      await navigator.clipboard.writeText(text);
-      log('Report copied to clipboard.');
-    } catch (_) {
-      // Clipboard API can be blocked; fall back to a hidden textarea.
-      const area = document.createElement('textarea');
-      area.value = text;
-      area.style.position = 'fixed';
-      area.style.opacity = '0';
-      document.body.appendChild(area);
-      area.select();
-      document.execCommand('copy');
-      area.remove();
-      log('Report copied to clipboard (fallback).');
-    }
-  }
-
-  /** Last-resort save path if the downloads API rejects the payload. */
-  function saveViaBlob(filename, mime, body) {
-    const url = URL.createObjectURL(new Blob([body], { type: mime }));
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
-
-  async function downloadReport(format) {
-    if (!state.lastReport) return;
-
-    const isCsv = format === 'csv';
-    const label = isCsv ? 'CSV' : 'JSON';
-    const filename = WTRLFormat.downloadName(state.lastReport, isCsv ? 'csv' : 'json');
-    const mime = isCsv ? 'text/csv' : 'application/json';
-    const payload = exportable();
-    const body = isCsv ? WTRLFormat.toCsv(payload) : JSON.stringify(payload, null, 2);
-
-    let response;
-    try {
-      response = await chrome.runtime.sendMessage({ type: 'download', filename, mime, body });
-    } catch (error) {
-      response = { ok: false, error: String(error && error.message ? error.message : error) };
-    }
-
-    if (response && response.ok) {
-      log(`Download started (${label}).`);
-      return;
-    }
-    log(`Downloads API failed (${(response && response.error) || 'unknown'}); saving directly.`);
-    saveViaBlob(filename, mime, body);
-  }
-
+  /**
+   * Upload honours the popup's "include rider stats" setting: the stored report
+   * always carries the stats (the table needs them), so shape it on the way out.
+   */
   async function sendReport() {
     if (!state.lastReport) return;
     log('Sending report to the Coalition app…');
-    const response = await chrome.runtime.sendMessage({
-      type: 'upload',
-      report: exportable()
-    });
+
+    const settings = await chrome.storage.local.get(['includeStats']);
+    const payload = settings.includeStats
+      ? state.lastReport
+      : WTRLFormat.stripStats(state.lastReport);
+
+    const response = await chrome.runtime.sendMessage({ type: 'upload', report: payload });
     if (response && response.ok) {
       log(`Sent successfully (HTTP ${response.status}).`);
     } else {
@@ -507,7 +478,7 @@
       return true;
     }
     if (message?.type === 'run-report') {
-      run({ includeStats: !!message.includeStats }).then(sendResponse);
+      run().then(sendResponse);
       return true; // async response
     }
     return false;

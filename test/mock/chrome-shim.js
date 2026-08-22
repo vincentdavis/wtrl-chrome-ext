@@ -15,9 +15,22 @@ window.chrome = {
     }
   },
   tabs: {
-    create: async ({ url }) => console.log('[mock] tabs.create', url),
-    query: async () => [],
-    sendMessage: async () => null
+    // Pretend a My Teams tab is already open, with a content script that can
+    // rebuild — enough to exercise the table's Refresh flow end to end.
+    query: async () => [{ id: 42, url: 'https://www.wtrl.racing/zrl/myteams/' }],
+    create: async ({ url }) => ({ id: 99, url }),
+    remove: async () => {},
+    sendMessage: async (tabId, message) => {
+      if (message.type === 'ping') return { ok: true, teams: 2 };
+      if (message.type === 'run-report') {
+        await new Promise((r) => setTimeout(r, 900));
+        const entry = window.__MOCK_LAST_REPORT;
+        entry.report.generatedAt = new Date().toISOString();
+        entry.generatedAt = entry.report.generatedAt;
+        return { ok: true, report: entry.report };
+      }
+      return null;
+    }
   },
   permissions: {
     contains: async () => false,

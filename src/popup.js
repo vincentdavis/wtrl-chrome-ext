@@ -31,8 +31,10 @@ async function pingContentScript(tabId) {
 function renderLastReport(entry) {
   if (!entry || !entry.report) {
     $('last').hidden = true;
+    $('table').disabled = true;
     return;
   }
+  $('table').disabled = false;
   lastReport = entry.report;
   $('teamCount').textContent = entry.teamCount ?? 0;
   $('riderCount').textContent = entry.riderCount ?? 0;
@@ -61,7 +63,12 @@ async function init() {
 
   const pong = await pingContentScript(tab.id);
   if (!pong) {
-    setStatus('Open your WTRL My Teams page, then reopen this popup.', 'warn');
+    setStatus(
+      lastReport
+        ? 'Showing your last report. Open WTRL My Teams to rebuild it.'
+        : 'Open your WTRL My Teams page, then reopen this popup.',
+      'warn'
+    );
     return;
   }
   if (!pong.teams) {
@@ -76,12 +83,9 @@ async function init() {
 $('run').addEventListener('click', async () => {
   if (activeTabId === null) return;
   $('run').disabled = true;
-  setStatus('Building report… you can watch progress on the page.', null);
+  setStatus('Rebuilding… you can watch progress on the page.', null);
   try {
-    const result = await chrome.tabs.sendMessage(activeTabId, {
-      type: 'run-report',
-      includeStats: $('includeStats').checked
-    });
+    const result = await chrome.tabs.sendMessage(activeTabId, { type: 'run-report' });
     if (result && result.ok) {
       setStatus(
         `Done — ${result.report.teamCount} teams, ${result.report.riderCount} riders.`,

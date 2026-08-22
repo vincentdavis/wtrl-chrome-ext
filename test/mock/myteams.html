@@ -94,6 +94,19 @@
             window.__lastExtensionMessage = message;
             if (message.type === 'store-report') {
               window.__storedReport = message.report;
+              // Mirror what the real background worker persists, so the
+              // "already built -> just open the table" path is exercised too.
+              mockStore.lastReport = {
+                generatedAt: message.report.generatedAt,
+                teamCount: message.report.teamCount,
+                riderCount: message.report.riderCount,
+                failures: message.report.failures || [],
+                report: message.report
+              };
+              return { ok: true };
+            }
+            if (message.type === 'open-results') {
+              window.__openedResults = (window.__openedResults || 0) + 1;
               return { ok: true };
             }
             if (message.type === 'download') {
