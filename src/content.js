@@ -28,7 +28,8 @@
     waiters: new Map(), // trc -> resolve fn
     pendingFetches: new Map(), // request id -> resolve fn
     running: false,
-    lastReport: null
+    lastReport: null,
+    includeStats: false
   };
 
   // ===========================================================================
@@ -257,6 +258,7 @@
               <button class="wr-copy wr-btn" type="button">Copy JSON</button>
               <button class="wr-json wr-btn" type="button">Download JSON</button>
               <button class="wr-csv wr-btn" type="button">Download CSV</button>
+              <button class="wr-table wr-btn wr-btn-primary" type="button">Open table</button>
               <button class="wr-send wr-btn" type="button">Send to Coalition</button>
             </div>
             <pre class="wr-preview"></pre>
@@ -303,6 +305,9 @@
     });
     ui.runBtn.addEventListener('click', () => {
       run({ includeStats: ui.statsToggle.checked });
+    });
+    $('.wr-table').addEventListener('click', () => {
+      chrome.runtime.sendMessage({ type: 'open-results' });
     });
     $('.wr-copy').addEventListener('click', copyReport);
     $('.wr-json').addEventListener('click', () => downloadReport('json'));
@@ -390,12 +395,9 @@
 
     setProgress(teams.length, teams.length, 'Done.');
 
-    const report = WTRLFormat.buildReport(entries, {
-      includeStats: !!options.includeStats,
-      failures,
-      extensionVersion: VERSION
-    });
+    const report = WTRLFormat.buildReport(entries, { failures, extensionVersion: VERSION });
     state.lastReport = report;
+    state.includeStats = !!options.includeStats;
 
     try {
       await chrome.runtime.sendMessage({ type: 'store-report', report });
@@ -418,9 +420,15 @@
     return { ok: true, report };
   }
 
+  /** The report as the user wants it exported: core fields unless stats are on. */
+  function exportable() {
+    if (!state.lastReport) return null;
+    return state.includeStats ? state.lastReport : WTRLFormat.stripStats(state.lastReport);
+  }
+
   async function copyReport() {
     if (!state.lastReport) return;
-    const text = JSON.stringify(state.lastReport, null, 2);
+    const text = JSON.stringify(exportable(), null, 2);
     try {
       await navigator.clipboard.writeText(text);
       log('Report copied to clipboard.');
@@ -457,9 +465,8 @@
     const label = isCsv ? 'CSV' : 'JSON';
     const filename = WTRLFormat.downloadName(state.lastReport, isCsv ? 'csv' : 'json');
     const mime = isCsv ? 'text/csv' : 'application/json';
-    const body = isCsv
-      ? WTRLFormat.toCsv(state.lastReport)
-      : JSON.stringify(state.lastReport, null, 2);
+    const payload = exportable();
+    const body = isCsv ? WTRLFormat.toCsv(payload) : JSON.stringify(payload, null, 2);
 
     let response;
     try {
@@ -481,7 +488,7 @@
     log('Sending report to the Coalition app…');
     const response = await chrome.runtime.sendMessage({
       type: 'upload',
-      report: state.lastReport
+      report: exportable()
     });
     if (response && response.ok) {
       log(`Sent successfully (HTTP ${response.status}).`);

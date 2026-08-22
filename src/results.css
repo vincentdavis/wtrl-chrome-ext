@@ -1,0 +1,259 @@
+/* Table view — layered on top of pages.css. */
+
+body.results {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body.results header {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  gap: 12px;
+}
+
+body.results header .meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+body.results .header-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+body.results main {
+  flex: 1;
+  gap: 14px;
+}
+
+body.results footer {
+  position: sticky;
+  bottom: 0;
+}
+
+/* ------------------------------------------------------------------ tiles --- */
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.tiles[hidden] {
+  display: none;
+}
+
+.tiles .stat {
+  font: inherit;
+  text-align: center;
+}
+
+.tiles .stat.clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.tiles .stat.clickable:hover {
+  border-color: var(--accent);
+  background: #232833;
+}
+
+.tiles .stat.warn .value {
+  color: var(--warn);
+}
+
+/* ---------------------------------------------------------------- toolbar --- */
+
+.toolbar {
+  display: flex;
+  /* pages.css sets `section { flex-direction: column }` — override it. */
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-soft);
+}
+
+.toolbar[hidden] {
+  display: none;
+}
+
+.toolbar input[type='search'] {
+  flex: 1 1 260px;
+  min-width: 200px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #0f1216;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.toolbar input[type='search']:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.toolbar select {
+  width: auto;
+  min-width: 150px;
+}
+
+.result-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ------------------------------------------------------------------ table --- */
+
+.table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: auto;
+  max-height: calc(100vh - 340px);
+  background: var(--bg-soft);
+}
+
+.table-wrap[hidden] {
+  display: none;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #232833;
+  border-bottom: 1px solid var(--line);
+  padding: 9px 12px;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+thead th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+thead th.sortable:hover {
+  color: var(--text);
+}
+
+thead th.sorted {
+  color: var(--accent-soft);
+}
+
+tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #22272f;
+  white-space: nowrap;
+}
+
+tbody tr:hover td {
+  background: #1f242c;
+}
+
+.align-center { text-align: center; }
+.align-right { text-align: right; font-variant-numeric: tabular-nums; }
+
+tbody tr.invited td:first-child {
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+td a {
+  color: var(--accent-soft);
+  text-decoration: none;
+}
+
+td a:hover {
+  text-decoration: underline;
+}
+
+.rider-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rider-name {
+  font-weight: 550;
+  color: var(--text);
+}
+
+.badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(230, 57, 70, 0.5);
+  color: var(--accent-soft);
+}
+
+.pill {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+
+.pill-ok {
+  color: var(--ok);
+  border-color: rgba(61, 220, 132, 0.35);
+}
+
+.pill-warn {
+  color: var(--warn);
+  border-color: rgba(255, 183, 3, 0.4);
+}
+
+td.yes { color: var(--ok); }
+td.no { color: var(--muted); }
+
+/* Team group header row. */
+tr.team-row td {
+  background: #10131a;
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  padding: 10px 12px;
+}
+
+tr.team-row:hover td {
+  background: #10131a;
+}
+
+.team-name {
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  margin-right: 10px;
+}
+
+.team-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.empty-row {
+  text-align: center;
+  color: var(--muted);
+  padding: 28px 12px;
+}

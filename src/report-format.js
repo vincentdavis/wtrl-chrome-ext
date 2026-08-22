@@ -33,18 +33,26 @@
    * Rider fields kept in the report. `zwid` is the Zwift profile id, which WTRL
    * returns as `profileId`.
    */
-  function mapRider(rider, includeStats) {
-    const core = {
+  /** The fields the JSON/CSV export keeps when "include rider stats" is off. */
+  var CORE_RIDER_FIELDS = [
+    'name',
+    'zwid',
+    'memberStatus',
+    'signedup',
+    'userId',
+    'tmuid',
+    'teams'
+  ];
+
+  function mapRider(rider) {
+    return {
       name: rider.name,
       zwid: rider.profileId,
       memberStatus: rider.memberStatus,
       signedup: rider.signedup,
       userId: rider.userId,
       tmuid: rider.tmuid,
-      teams: rider.teams
-    };
-    if (!includeStats) return core;
-    return Object.assign(core, {
+      teams: rider.teams,
       category: rider.category,
       zftp: round2(rider.zftp),
       zftpw: rider.zftpw,
@@ -54,6 +62,31 @@
       appearancesRound: rider.appearancesRound,
       appearancesSeason: rider.appearancesSeason,
       avatar: rider.avatar
+    };
+  }
+
+  /**
+   * Reduce every rider down to the core fields. The full report is what gets
+   * stored (the table view needs the stats); this is what gets exported unless
+   * the user asks for stats.
+   */
+  function stripStats(report) {
+    const pick = (rider, extra) => {
+      const out = {};
+      extra.forEach((key) => {
+        if (key in rider) out[key] = rider[key];
+      });
+      CORE_RIDER_FIELDS.forEach((key) => {
+        out[key] = rider[key];
+      });
+      return out;
+    };
+
+    return Object.assign({}, report, {
+      teams: (report.teams || []).map((team) =>
+        Object.assign({}, team, { riders: (team.riders || []).map((r) => pick(r, [])) })
+      ),
+      riders: (report.riders || []).map((r) => pick(r, ['teamName', 'trc']))
     });
   }
 
@@ -61,11 +94,10 @@
    * Assemble the final report.
    *
    * @param entries  [{ team: {name, trc, season}, data: <team payload> }]
-   * @param options  { includeStats, failures, extensionVersion, generatedAt }
+   * @param options  { failures, extensionVersion, generatedAt }
    */
   function buildReport(entries, options) {
     const opts = options || {};
-    const includeStats = !!opts.includeStats;
 
     const teams = entries.map((entry) => {
       const meta = entry.data.meta || {};
@@ -84,7 +116,7 @@
         registrationStatus: competition.status || null,
         memberCount:
           meta.memberCount !== undefined ? meta.memberCount : (entry.data.riders || []).length,
-        riders: (entry.data.riders || []).map((rider) => mapRider(rider, includeStats))
+        riders: (entry.data.riders || []).map(mapRider)
       };
     });
 
@@ -175,7 +207,50 @@
     return 'wtrl-team-report-' + filenameStamp(report) + '.' + extension;
   }
 
+  /** Group flat rider rows by Zwift id. */
+  function ridersByZwid(report) {
+    const map = new Map();
+    (report.riders || []).forEach((rider) => {
+      const key = rider.zwid;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(rider);
+    });
+    return map;
+  }
+
+  /** Zwift ids that appear on more than one of the manager's teams. */
+  function multiTeamZwids(report) {
+    const out = new Set();
+    ridersByZwid(report).forEach((rows, zwid) => {
+      if (rows.length > 1) out.add(zwid);
+    });
+    return out;
+  }
+
+  /** Headline counts for the table view's stat tiles. */
+  function summarise(report) {
+    const rows = report.riders || [];
+    const has = (rider, key) => rider[key] !== undefined && rider[key] !== null;
+    return {
+      teams: report.teamCount || (report.teams || []).length,
+      rosterSpots: rows.length,
+      uniqueRiders: ridersByZwid(report).size,
+      members: rows.filter((r) => r.memberStatus === 'MEMBER').length,
+      invited: rows.filter((r) => r.memberStatus === 'INVITED').length,
+      signedUp: rows.filter((r) => r.signedup === true).length,
+      notSignedUp: rows.filter((r) => r.signedup !== true).length,
+      multiTeam: multiTeamZwids(report).size,
+      noRacesThisSeason: rows.filter((r) => has(r, 'appearancesSeason') && !r.appearancesSeason)
+        .length
+    };
+  }
+
   root.WTRLFormat = {
+    CORE_RIDER_FIELDS,
+    stripStats,
+    ridersByZwid,
+    multiTeamZwids,
+    summarise,
     isTeamPayload,
     round2,
     mapRider,

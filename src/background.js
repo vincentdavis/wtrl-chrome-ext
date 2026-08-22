@@ -104,6 +104,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           chrome.runtime.openOptionsPage();
           sendResponse({ ok: true });
           break;
+        case 'open-results':
+          await chrome.tabs.create({ url: chrome.runtime.getURL('src/results.html') });
+          sendResponse({ ok: true });
+          break;
         default:
           sendResponse({ ok: false, error: 'Unknown message type' });
       }

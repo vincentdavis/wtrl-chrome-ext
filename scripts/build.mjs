@@ -4,7 +4,9 @@
  *
  * Deliberately dependency-free: the ZIP container is written by hand so a clone
  * of this repo can be built with nothing but Node installed. Entries use a fixed
- * DOS timestamp so the same source always produces a byte-identical archive.
+ * DOS timestamp, so the same source on the same Node build produces a
+ * byte-identical archive. (zlib's deflate output varies between Node versions,
+ * so hashes are not comparable across them — compare extracted contents.)
  */
 
 import { createHash } from 'node:crypto';

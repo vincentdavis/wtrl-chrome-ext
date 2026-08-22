@@ -62,8 +62,8 @@ test('buildReport carries team metadata', () => {
   assert.equal(first.riders.length, 6);
 });
 
-test('rider rows expose exactly the requested fields, with zwid from profileId', () => {
-  const report = F.buildReport(entries, buildOpts);
+test('stripStats reduces riders to exactly the requested fields', () => {
+  const report = F.stripStats(F.buildReport(entries, buildOpts));
   const chad = report.teams[0].riders[0];
 
   assert.deepEqual(Object.keys(chad), [
@@ -91,6 +91,21 @@ test('INVITED members are kept, not filtered out', () => {
   assert.equal(report.riders.filter((r) => r.memberStatus === 'INVITED').length, 2);
 });
 
+test('stripStats keeps teamName and trc on flat rows', () => {
+  const stripped = F.stripStats(F.buildReport(entries, buildOpts));
+  assert.deepEqual(Object.keys(stripped.riders[0]), [
+    'teamName',
+    'trc',
+    'name',
+    'zwid',
+    'memberStatus',
+    'signedup',
+    'userId',
+    'tmuid',
+    'teams'
+  ]);
+});
+
 test('flat rider rows are tagged with their team', () => {
   const report = F.buildReport(entries, buildOpts);
 
@@ -101,12 +116,11 @@ test('flat rider rows are tagged with their team', () => {
   assert.equal(report.riders[6].trc, 76637);
 
   // A rider on two teams appears once per team.
-  const withStats = F.buildReport(entries, { ...buildOpts, includeStats: true });
-  assert.equal(withStats.riders.filter((r) => r.zwid === 87402).length, 1);
+  assert.equal(report.riders.filter((r) => r.zwid === 87402).length, 1);
 });
 
-test('includeStats adds stat fields and rounds the float noise away', () => {
-  const report = F.buildReport(entries, { ...buildOpts, includeStats: true });
+test('buildReport keeps stat fields and rounds the float noise away', () => {
+  const report = F.buildReport(entries, buildOpts);
   const chad = report.teams[0].riders[0];
 
   assert.equal(chad.category, 'B');
@@ -167,7 +181,7 @@ test('renderTemplate round-trips a derived template', () => {
 });
 
 test('toCsv emits a header plus one row per rider and quotes correctly', () => {
-  const report = F.buildReport(entries, buildOpts);
+  const report = F.stripStats(F.buildReport(entries, buildOpts));
   const lines = F.toCsv(report).split('\n');
 
   assert.equal(lines.length, 9, 'header + 8 riders');
@@ -192,4 +206,41 @@ test('downloadName builds a filesystem-safe name', () => {
   const report = F.buildReport(entries, buildOpts);
   assert.equal(F.downloadName(report, 'json'), 'wtrl-team-report-2026-08-22-12-00-00.json');
   assert.equal(F.downloadName(report, 'csv'), 'wtrl-team-report-2026-08-22-12-00-00.csv');
+});
+
+test('summarise counts the things a manager acts on', () => {
+  const s = F.summarise(F.buildReport(entries, buildOpts));
+
+  assert.equal(s.teams, 2);
+  assert.equal(s.rosterSpots, 8, 'one row per rider per team');
+  assert.equal(s.uniqueRiders, 8, 'no rider is on two teams in these fixtures');
+  assert.equal(s.members, 6);
+  assert.equal(s.invited, 2, 'invited but not yet accepted');
+  assert.equal(s.signedUp, 1);
+  assert.equal(s.notSignedUp, 7);
+  assert.equal(s.multiTeam, 0);
+  assert.equal(s.noRacesThisSeason, 7, 'only one fixture rider has appearances');
+});
+
+test('multi-team riders are detected by zwid across teams', () => {
+  // Put the same rider on both teams.
+  const shared = JSON.parse(JSON.stringify(teamB));
+  shared.riders.push(JSON.parse(JSON.stringify(teamA.riders[1])));
+  const report = F.buildReport(
+    [entries[0], { team: { name: 'COALITION DELUSION', trc: 76637, season: 20 }, data: shared }],
+    buildOpts
+  );
+
+  const multi = F.multiTeamZwids(report);
+  assert.equal(multi.size, 1);
+  assert.ok(multi.has(1562251), 'Dan Klopfer is now on both teams');
+  assert.equal(F.summarise(report).multiTeam, 1);
+  assert.equal(F.summarise(report).uniqueRiders, 8, '9 roster spots, 8 people');
+});
+
+test('ridersByZwid groups a rider\'s team rows together', () => {
+  const report = F.buildReport(entries, buildOpts);
+  const byZwid = F.ridersByZwid(report);
+  assert.equal(byZwid.get(38810).length, 1);
+  assert.equal(byZwid.get(38810)[0].teamName, 'COALITION ANNIHILATION');
 });

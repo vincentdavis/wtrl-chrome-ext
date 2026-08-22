@@ -31,13 +31,41 @@ unpacked extensions.
 2. Click the red **Report** button in the bottom-right corner.
 3. Press **Build report**.
 
-The panel walks your teams one at a time and shows progress. When it finishes you
-can **Copy JSON**, **Download JSON**, **Download CSV**, or **Send to Coalition**.
-The extension's toolbar popup does the same thing and keeps the last report so
-you can re-download it later.
+The panel walks your teams one at a time and shows progress. When it finishes,
+**Open table** gives you the full roster view, or you can **Copy JSON**,
+**Download JSON**, **Download CSV**, or **Send to Coalition**. The extension's
+toolbar popup does the same thing and keeps the last report so you can come back
+to it later.
 
-Tick **Include rider stats** to add category, zFTP, zMAP, points and appearances
-to every rider.
+Tick **Include rider stats** to keep category, zFTP, zMAP, points and appearances
+in the JSON/CSV export. (The table always has them — the toggle only changes what
+gets exported.)
+
+## Table view
+
+**Open table** opens the whole roster in one sortable, filterable table.
+
+- **Grouped by team** by default, with each team's division and counts in its
+  header row. Untick to get one flat list with a Team column.
+- **Search** across name, Zwift id, user id and team. Press `/` to jump to the
+  box, `Esc` to clear it.
+- **Filters** for team, membership status, sign-up state and races this season,
+  plus a **multi-team only** toggle.
+- **Sort** on any column — click a header, click again to reverse. Numeric
+  columns start highest-first.
+- **Stat tiles** across the top double as one-click filters: *Invited, pending*
+  jumps straight to riders who have been invited but have not accepted;
+  *Not signed up*, *No races yet*, and *On 2+ teams* work the same way.
+- **Race counts** per rider for the current round and the season so far.
+- Riders on more than one of your teams carry a **multi-team** badge — matched on
+  `zwid`, so it catches the same person across different teams.
+- Pending invites are tinted amber and flagged in each team's header.
+- **zwid** links out to that rider's ZwiftPower profile.
+- **Export view (CSV)** saves exactly the rows you are looking at, filters and
+  sort included — handy for chasing a specific group.
+
+A partial report (some team failed to load) shows a banner naming the teams that
+are missing, so the table is never quietly incomplete.
 
 ## Output
 
@@ -206,6 +234,7 @@ step is needed to run it.
 | `src/report-format.js`  | Pure report shaping + CSV — shared, and unit-tested             |
 | `src/background.js`     | Service worker: downloads, upload, API key custody              |
 | `src/settings.js`       | Settings schema shared by the worker, popup and options page    |
+| `src/results.*`         | Table view: search, filter, sort, group by team                 |
 | `src/popup.*`           | Toolbar popup                                                   |
 | `src/options.*`         | Settings page                                                   |
 | `scripts/build.mjs`     | Dependency-free, reproducible ZIP packer                        |
@@ -239,6 +268,9 @@ relearn the endpoint.
 
 **The Report button is missing.** Reload the page. The button is injected once
 the team accordion appears.
+
+**Race counts are all zero.** WTRL reports `appearancesRound` and
+`appearancesSeason`; both are 0 before a season's racing starts.
 
 ## License
 

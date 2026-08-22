@@ -104,13 +104,24 @@ $('open').addEventListener('click', () => {
 
 $('options').addEventListener('click', () => chrome.runtime.openOptionsPage());
 
+/** The stored report always has stats; the toggle decides what leaves here. */
+function exportable() {
+  if (!lastReport) return null;
+  return $('includeStats').checked ? lastReport : WTRLFormat.stripStats(lastReport);
+}
+
+$('table').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'open-results' });
+  window.close();
+});
+
 $('json').addEventListener('click', () => {
   if (!lastReport) return;
   chrome.runtime.sendMessage({
     type: 'download',
     filename: WTRLFormat.downloadName(lastReport, 'json'),
     mime: 'application/json',
-    body: JSON.stringify(lastReport, null, 2)
+    body: JSON.stringify(exportable(), null, 2)
   });
 });
 
@@ -120,20 +131,20 @@ $('csv').addEventListener('click', () => {
     type: 'download',
     filename: WTRLFormat.downloadName(lastReport, 'csv'),
     mime: 'text/csv',
-    body: WTRLFormat.toCsv(lastReport)
+    body: WTRLFormat.toCsv(exportable())
   });
 });
 
 $('copy').addEventListener('click', async () => {
   if (!lastReport) return;
-  await navigator.clipboard.writeText(JSON.stringify(lastReport, null, 2));
+  await navigator.clipboard.writeText(JSON.stringify(exportable(), null, 2));
   setStatus('Report JSON copied to clipboard.', 'ok');
 });
 
 $('send').addEventListener('click', async () => {
   if (!lastReport) return;
   setStatus('Sending to the Coalition app…', null);
-  const response = await chrome.runtime.sendMessage({ type: 'upload', report: lastReport });
+  const response = await chrome.runtime.sendMessage({ type: 'upload', report: exportable() });
   if (response && response.ok) {
     setStatus(`Sent successfully (HTTP ${response.status}).`, 'ok');
   } else {
