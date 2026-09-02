@@ -37,6 +37,12 @@ window.chrome = {
     request: async () => false
   },
   storage: {
+    onChanged: {
+      _listeners: [],
+      addListener(fn) {
+        this._listeners.push(fn);
+      }
+    },
     local: {
       get: async (keys) => {
         const store = { lastReport: window.__MOCK_LAST_REPORT || null };
@@ -50,4 +56,12 @@ window.chrome = {
       remove: async () => {}
     }
   }
+};
+
+/** Test helper: publish a stored report and notify listeners, as Chrome would. */
+window.__mockPushReport = (entry) => {
+  window.__MOCK_LAST_REPORT = entry;
+  chrome.storage.onChanged._listeners.forEach((fn) =>
+    fn({ lastReport: { newValue: entry } }, 'local')
+  );
 };

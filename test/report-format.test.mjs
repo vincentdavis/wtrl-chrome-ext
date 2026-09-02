@@ -337,3 +337,83 @@ test('mergeReports without an order argument still merges', () => {
   assert.equal(merged.teamCount, 2);
   assert.equal(merged.riderCount, 8);
 });
+
+// ------------------------------------------------------ incremental saves ---
+
+test('a finished report carries no in-progress markers', () => {
+  const report = F.buildReport(entries, buildOpts);
+  assert.equal('inProgress' in report, false);
+  assert.equal('progress' in report, false);
+});
+
+test('a partial report describes its own progress', () => {
+  const partial = F.buildReport([entries[0]], {
+    ...buildOpts,
+    inProgress: true,
+    progress: { done: 1, total: 2 }
+  });
+
+  assert.equal(partial.inProgress, true);
+  assert.equal(partial.progress.done, 1);
+  assert.equal(partial.progress.total, 2);
+  // A partial save is a usable report, not a placeholder.
+  assert.equal(partial.teamCount, 1);
+  assert.equal(partial.riderCount, 6);
+  assert.equal(partial.teams[0].teamName, 'COALITION ANNIHILATION');
+});
+
+test('the last save of a run clears the in-progress flag', () => {
+  // done === total means the run is over, even if inProgress was passed.
+  const done = F.buildReport(entries, {
+    ...buildOpts,
+    inProgress: false,
+    progress: { done: 2, total: 2 }
+  });
+  assert.equal('inProgress' in done, false);
+  assert.equal('progress' in done, false);
+});
+
+test('merging a finished pass clears a stale in-progress flag', () => {
+  // Otherwise the table would stay locked with rebuild/retry disabled forever.
+  const partial = F.buildReport([entries[0]], {
+    ...buildOpts,
+    inProgress: true,
+    progress: { done: 1, total: 2 }
+  });
+  const finished = F.buildReport([entries[1]], buildOpts);
+
+  const merged = F.mergeReports(partial, finished, [76720, 76637]);
+
+  assert.equal('inProgress' in merged, false, 'stale flag must not survive');
+  assert.equal('progress' in merged, false);
+  assert.equal(merged.teamCount, 2);
+  assert.equal(merged.riderCount, 8);
+});
+
+test('merging an in-flight pass keeps the in-progress flag', () => {
+  const base = F.buildReport([entries[0]], { ...buildOpts, failures: [] });
+  const inFlight = F.buildReport([entries[1]], {
+    ...buildOpts,
+    inProgress: true,
+    progress: { done: 1, total: 3 }
+  });
+
+  const merged = F.mergeReports(base, inFlight, [76720, 76637]);
+
+  assert.equal(merged.inProgress, true);
+  assert.equal(merged.progress.total, 3);
+});
+
+test('stripStats keeps a partial report exportable', () => {
+  const partial = F.buildReport([entries[0]], {
+    ...buildOpts,
+    inProgress: true,
+    progress: { done: 1, total: 2 }
+  });
+  const stripped = F.stripStats(partial);
+  assert.equal(stripped.riderCount, 6);
+  assert.equal(
+    Object.keys(stripped.teams[0].riders[0]).join(','),
+    Array.from(F.CORE_RIDER_FIELDS).join(',')
+  );
+});

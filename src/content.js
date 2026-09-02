@@ -375,8 +375,14 @@
     ui.summaryEl.textContent = text;
   }
 
-  /** Walk a list of teams, collecting each and pacing between them. */
-  async function collectAll(teams) {
+  /**
+   * Walk a list of teams, collecting each and pacing between them.
+   *
+   * `onTeamDone` is awaited after every team so the caller can persist what it
+   * has so far — a run that is interrupted keeps everything collected up to
+   * that point, and the report table can fill in live.
+   */
+  async function collectAll(teams, onTeamDone) {
     const entries = [];
     const failures = [];
 
@@ -400,6 +406,14 @@
         } else {
           failures.push({ trc: team.trc, teamName: team.name, error: result.error });
           log(`${team.name}: FAILED — ${result.error}`);
+        }
+
+        if (onTeamDone) {
+          try {
+            await onTeamDone(entries, failures, i + 1, teams.length);
+          } catch (_) {
+            // Persisting a partial result must never abort the run.
+          }
         }
 
         if (i < teams.length - 1) await wait(state.paceMs);
@@ -447,7 +461,8 @@
   /** Build a report, then show it. Used when nothing has been built yet. */
   async function buildThenOpen() {
     showPanel();
-    const result = await run();
+    // The table opens as soon as the first team lands and fills in from there.
+    const result = await run({ openWhenReady: true });
     if (!result || !result.ok) return; // the panel already explains why
 
     if (ui) {
@@ -457,7 +472,7 @@
 
     // A partial report is worth showing, but not worth hiding the warning for.
     if (!(result.report.failures || []).length) {
-      openReport();
+      openReport(); // focuses the tab already open
       setTimeout(() => {
         if (ui && !state.running) ui.panel.hidden = true;
       }, 1500);
@@ -476,7 +491,15 @@
     await buildThenOpen();
   }
 
-  async function run() {
+  async function persist(report) {
+    state.lastReport = report;
+    try {
+      await chrome.runtime.sendMessage({ type: 'store-report', report });
+    } catch (_) {}
+  }
+
+  async function run(options) {
+    const opts = options || {};
     if (state.running) return { ok: false, error: 'A report is already running.' };
 
     const teams = discoverTeams();
@@ -510,14 +533,30 @@
 
     log(`Found ${teams.length} team${teams.length === 1 ? '' : 's'}.`);
 
-    const { entries, failures } = await collectAll(teams);
+    let openedResults = false;
+
+    const { entries, failures } = await collectAll(
+      teams,
+      async (partialEntries, partialFailures, done, total) => {
+        await persist(
+          WTRLFormat.buildReport(partialEntries, {
+            failures: partialFailures,
+            extensionVersion: VERSION,
+            inProgress: done < total,
+            progress: { done, total }
+          })
+        );
+        // Show the table as soon as there is a team in it, so the rest fills in
+        // in front of the user rather than behind a progress bar.
+        if (opts.openWhenReady && !openedResults && partialEntries.length) {
+          openedResults = true;
+          openReport();
+        }
+      }
+    );
 
     const report = WTRLFormat.buildReport(entries, { failures, extensionVersion: VERSION });
-    state.lastReport = report;
-
-    try {
-      await chrome.runtime.sendMessage({ type: 'store-report', report });
-    } catch (_) {}
+    await persist(report);
 
     setSummary(
       `${report.teamCount} team${report.teamCount === 1 ? '' : 's'}, ` +
@@ -578,19 +617,32 @@
 
     log(`Retrying ${teams.length} failed team${teams.length === 1 ? '' : 's'}.`);
 
-    const { entries, failures } = await collectAll(teams);
+    const order = onPage.map((team) => team.trc);
+    const mergePartial = (partialEntries, partialFailures, done, total) =>
+      WTRLFormat.mergeReports(
+        previous,
+        WTRLFormat.buildReport(partialEntries, {
+          failures: partialFailures,
+          extensionVersion: VERSION,
+          inProgress: done < total,
+          progress: { done, total }
+        }),
+        order
+      );
 
-    const addition = WTRLFormat.buildReport(entries, { failures, extensionVersion: VERSION });
+    const { entries, failures } = await collectAll(
+      teams,
+      async (partialEntries, partialFailures, done, total) => {
+        await persist(mergePartial(partialEntries, partialFailures, done, total));
+      }
+    );
+
     const report = WTRLFormat.mergeReports(
       previous,
-      addition,
-      onPage.map((team) => team.trc)
+      WTRLFormat.buildReport(entries, { failures, extensionVersion: VERSION }),
+      order
     );
-    state.lastReport = report;
-
-    try {
-      await chrome.runtime.sendMessage({ type: 'store-report', report });
-    } catch (_) {}
+    await persist(report);
 
     const recovered = teams.length - failures.length;
     setSummary(

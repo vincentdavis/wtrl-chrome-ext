@@ -94,7 +94,11 @@
    * Assemble the final report.
    *
    * @param entries  [{ team: {name, trc, season}, data: <team payload> }]
-   * @param options  { failures, extensionVersion, generatedAt }
+   * @param options  { failures, extensionVersion, generatedAt, inProgress, progress }
+   *
+   * A report saved part-way through a run carries `inProgress: true` and a
+   * `{ done, total }` progress counter; a finished one omits both, so exports
+   * and uploads stay clean.
    */
   function buildReport(entries, options) {
     const opts = options || {};
@@ -122,7 +126,7 @@
 
     const riders = flattenTeams(teams);
 
-    return {
+    const report = {
       generatedAt: opts.generatedAt || new Date().toISOString(),
       source: 'wtrl.racing/zrl/myteams',
       extensionVersion: opts.extensionVersion || null,
@@ -132,6 +136,12 @@
       teams,
       riders
     };
+
+    if (opts.inProgress) {
+      report.inProgress = true;
+      report.progress = opts.progress || null;
+    }
+    return report;
   }
 
   /** Flat rows: one per rider per team, carrying the team name for CSV/import. */
@@ -199,13 +209,21 @@
 
     const riders = flattenTeams(teams);
 
-    return Object.assign({}, base, incoming, {
+    const merged = Object.assign({}, base, incoming, {
       teams,
       riders,
       teamCount: teams.length,
       riderCount: riders.length,
       failures
     });
+
+    // Object.assign would let a stale `inProgress: true` from the base survive
+    // a finished incoming pass; the newer pass decides whether we are still running.
+    if (!incoming.inProgress) {
+      delete merged.inProgress;
+      delete merged.progress;
+    }
+    return merged;
   }
 
   /**

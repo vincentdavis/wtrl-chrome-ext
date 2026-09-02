@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.4.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.5.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -31,8 +31,8 @@ unpacked extensions.
 2. Click the red **Report** button in the bottom-right corner.
 
 That's the whole flow. The button opens your report. If you haven't built one
-yet it builds it first — showing progress as it reads each team — then opens it
-as soon as it's ready.
+yet it starts building, opens the report as soon as the first team lands, and
+fills the rest in live while you read.
 
 Everything else lives in the **toolbar popup** (the extension icon next to the
 address bar): JSON and CSV export, copy to clipboard, and Send to Coalition.
@@ -63,6 +63,12 @@ The report is a sortable, filterable table of every rider across all your teams.
   `zwid`, so it catches the same person across different teams.
 - Pending invites are tinted amber and flagged in each team's header.
 - **zwid** links out to that rider's ZwiftPower profile.
+- **Fills in live.** Each team is saved the moment it is read, so the table
+  grows in front of you and a progress banner tracks how far along the run is.
+  Refresh and Retry are disabled while a run is in flight.
+- **Nothing is lost if a run is interrupted.** Close the tab at team 19 of 21
+  and the 18 already collected are still there — the table says the build was
+  interrupted and offers to finish it, rather than starting from nothing.
 - **Retry failed teams** appears in the partial-report banner when some teams
   could not be read. It re-reads only those teams and folds them into the report
   you already have, so 18 good teams don't get thrown away to recover 3.
@@ -75,6 +81,10 @@ The report is a sortable, filterable table of every rider across all your teams.
 
 A partial report (some team failed to load) shows a banner naming the teams that
 are missing, so the table is never quietly incomplete.
+
+While a run is in flight the report carries `inProgress: true` and a
+`{ done, total }` counter; both are gone once it finishes, so exports and uploads
+are unaffected.
 
 Tick **Include rider stats** in the popup to keep category, zFTP, zMAP, points
 and race counts in the JSON/CSV export. The table always shows them — the toggle
@@ -203,6 +213,8 @@ teams:
   says what actually happened.
 - Anything still failing can be picked up later with **Retry failed teams**
   instead of rebuilding everything.
+- **Every team is saved as it arrives**, so a run that is interrupted keeps
+  everything collected up to that point.
 
 Raise **Request timeout** in Settings if you manage many teams or your connection
 is slow.
@@ -296,6 +308,10 @@ Every other push uploads the same zip as a build artifact.
 **"No teams found on this page."** You need to be on
 <https://www.wtrl.racing/zrl/myteams/> and signed in. If the page is still
 loading the accordion, wait a moment and press **Build report** again.
+
+**The table says "Build was interrupted".** The WTRL tab was closed or navigated
+away mid-run. Everything collected up to that point is kept — press **Refresh**
+to finish the job, or **Retry failed teams** if only a few are missing.
 
 **Some teams time out on a big roster.** Transient failures are retried
 automatically with backoff, and the run slows itself down under strain. If teams

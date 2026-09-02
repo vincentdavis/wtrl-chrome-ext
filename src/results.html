@@ -21,7 +21,8 @@
 
     <main>
       <div class="note error" id="empty" hidden>
-        No report stored yet. Open your WTRL My Teams page and build one first.
+        No report stored yet. Open your WTRL My Teams page and press
+        <strong>Report</strong> to build one.
       </div>
 
       <div class="note warn" id="partial" hidden>
@@ -29,6 +30,11 @@
         <button id="retryFailed" class="inline-btn">Retry failed teams</button>
       </div>
       <div class="note" id="refreshStatus" hidden></div>
+
+      <div class="live" id="live" hidden>
+        <span id="liveText"></span>
+        <div class="live-bar"><div class="live-bar-fill" id="liveFill"></div></div>
+      </div>
 
       <!-- Clicking a tile applies it as a filter. -->
       <section class="tiles" id="tiles"></section>

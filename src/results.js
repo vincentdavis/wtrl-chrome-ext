@@ -65,6 +65,8 @@ async function loadReport() {
   $('generatedAt').textContent =
     'built ' + new Date(state.report.generatedAt).toLocaleString();
 
+  renderLiveState();
+
   const failures = state.report.failures || [];
   $('partial').hidden = !failures.length;
   if (failures.length) {
@@ -76,9 +78,71 @@ async function loadReport() {
   buildTeamFilter();
   renderTiles();
   renderHead();
+
+  // Live updates re-render the whole body; keep the reader where they were.
+  const wrap = document.querySelector('.table-wrap');
+  const scrollTop = wrap ? wrap.scrollTop : 0;
   render();
+  if (wrap) wrap.scrollTop = scrollTop;
+
   return true;
 }
+
+/**
+ * A run that is abandoned part-way — the WTRL tab is closed or navigated away —
+ * leaves `inProgress: true` behind with nothing to clear it. Without this the
+ * table would sit with Refresh and Retry disabled forever. A partial save that
+ * has not been updated for this long is treated as interrupted, not live.
+ *
+ * The window is generous: one team can legitimately take a couple of minutes
+ * when it is retrying with backoff and then falling back to a panel click.
+ */
+const INTERRUPTED_AFTER_MS = 5 * 60 * 1000;
+
+function partialAge() {
+  if (!state.report || !state.report.generatedAt) return Infinity;
+  const at = Date.parse(state.report.generatedAt);
+  return Number.isNaN(at) ? Infinity : Date.now() - at;
+}
+
+function renderLiveState() {
+  const partial = !!(state.report && state.report.inProgress);
+  const interrupted = partial && partialAge() > INTERRUPTED_AFTER_MS;
+  const building = partial && !interrupted;
+  const progress = (state.report && state.report.progress) || null;
+
+  document.body.classList.toggle('building', building);
+  $('live').hidden = !partial;
+
+  if (building) {
+    const done = progress ? progress.done : 0;
+    const total = progress ? progress.total : 0;
+    $('live').classList.remove('interrupted');
+    $('liveText').textContent = total
+      ? `Building — ${done} of ${total} teams read. This table fills in as they arrive.`
+      : 'Building…';
+    $('liveFill').style.width = total ? Math.round((done / total) * 100) + '%' : '0%';
+  } else if (interrupted) {
+    const done = progress ? progress.done : state.report.teamCount;
+    const total = progress ? progress.total : '?';
+    $('live').classList.add('interrupted');
+    $('liveText').textContent =
+      `Build was interrupted after ${done} of ${total} teams — showing what was collected. ` +
+      'Refresh to finish it.';
+    $('liveFill').style.width = '100%';
+  }
+
+  // Kicking off a second run while one is genuinely in flight would fight over
+  // the report; an interrupted one should be recoverable.
+  [$('refresh'), $('retryFailed')].forEach((button) => {
+    if (button) button.disabled = building;
+  });
+}
+
+// Re-evaluate periodically so an abandoned build unlocks itself without a reload.
+setInterval(() => {
+  if (state.report && state.report.inProgress) renderLiveState();
+}, 15000);
 
 function buildTeamFilter() {
   const select = $('teamFilter');
@@ -482,7 +546,9 @@ async function runOnMyTeamsTab(kind, labels) {
       'error'
     );
   } finally {
-    buttons.forEach((b) => b && (b.disabled = false));
+    const stillBuilding =
+      !!(state.report && state.report.inProgress) && partialAge() <= INTERRUPTED_AFTER_MS;
+    buttons.forEach((b) => b && (b.disabled = stillBuilding));
     // Only clean up a tab we opened ourselves.
     if (openedTab) {
       try {
@@ -491,6 +557,15 @@ async function runOnMyTeamsTab(kind, labels) {
     }
   }
 }
+
+// The content script saves the report after every team, so watching storage
+// makes the table fill in live while a build or refresh is running.
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes.lastReport) return;
+  loadReport().then((hasReport) => {
+    if (hasReport) syncControls();
+  });
+});
 
 $('refresh').addEventListener('click', () =>
   runOnMyTeamsTab('run-report', {

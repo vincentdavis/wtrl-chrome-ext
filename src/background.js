@@ -43,6 +43,31 @@ async function handleStoreReport(report) {
   return { ok: true };
 }
 
+/**
+ * Show the report table, reusing a tab that already has it open.
+ *
+ * A run calls this twice — once when the first team lands, once when it
+ * finishes — so creating a tab unconditionally would leave duplicates behind.
+ */
+async function openResults() {
+  const url = chrome.runtime.getURL('src/results.html');
+  const existing = await chrome.tabs.query({ url });
+
+  if (existing.length) {
+    const tab = existing[0];
+    await chrome.tabs.update(tab.id, { active: true });
+    try {
+      await chrome.windows.update(tab.windowId, { focused: true });
+    } catch (_) {
+      // Window may not be focusable (e.g. minimised); the tab is still selected.
+    }
+    return { ok: true, tabId: tab.id, reused: true };
+  }
+
+  const tab = await chrome.tabs.create({ url });
+  return { ok: true, tabId: tab.id, reused: false };
+}
+
 async function handleUpload(report) {
   const settings = await getSettings();
 
@@ -105,8 +130,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           sendResponse({ ok: true });
           break;
         case 'open-results':
-          await chrome.tabs.create({ url: chrome.runtime.getURL('src/results.html') });
-          sendResponse({ ok: true });
+          sendResponse(await openResults());
           break;
         default:
           sendResponse({ ok: false, error: 'Unknown message type' });
