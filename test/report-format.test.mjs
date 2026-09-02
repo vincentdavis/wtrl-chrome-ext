@@ -244,3 +244,96 @@ test('ridersByZwid groups a rider\'s team rows together', () => {
   assert.equal(byZwid.get(38810).length, 1);
   assert.equal(byZwid.get(38810)[0].teamName, 'COALITION ANNIHILATION');
 });
+
+// ---------------------------------------------------------- retry / merge ---
+
+test('isRetryableFailure retries transient failures only', () => {
+  // Transient: worth backing off and asking again.
+  assert.equal(F.isRetryableFailure({ timedOut: true, error: 'Timed out after 30s' }), true);
+  assert.equal(F.isRetryableFailure({ error: 'Failed to fetch' }), true, 'no status = network failure');
+  assert.equal(F.isRetryableFailure({ status: 429 }), true, 'rate limited');
+  assert.equal(F.isRetryableFailure({ status: 408 }), true);
+  assert.equal(F.isRetryableFailure({ status: 500 }), true);
+  assert.equal(F.isRetryableFailure({ status: 503 }), true);
+  assert.equal(F.isRetryableFailure(null), true);
+
+  // Permanent: retrying returns the identical answer.
+  assert.equal(F.isRetryableFailure({ status: 404 }), false);
+  assert.equal(F.isRetryableFailure({ status: 403 }), false);
+  assert.equal(
+    F.isRetryableFailure({ status: 200, error: 'Response was not a team payload' }),
+    false,
+    'a login-page redirect will not fix itself'
+  );
+});
+
+test('mergeReports folds a retry into an earlier partial report', () => {
+  // First pass: team A succeeded, team B timed out.
+  const first = F.buildReport([entries[0]], {
+    ...buildOpts,
+    failures: [{ trc: 76637, teamName: 'COALITION DELUSION', error: 'Timed out after 30s' }]
+  });
+  assert.equal(first.teamCount, 1);
+  assert.equal(first.riderCount, 6);
+  assert.equal(first.failures.length, 1);
+
+  // Retry pass: team B now succeeds.
+  const retry = F.buildReport([entries[1]], {
+    ...buildOpts,
+    generatedAt: '2026-08-22T12:05:00.000Z'
+  });
+
+  const merged = F.mergeReports(first, retry, [76720, 76637]);
+
+  assert.equal(merged.teamCount, 2, 'keeps the team that already succeeded');
+  assert.equal(merged.riderCount, 8, 'flat rows rebuilt across both teams');
+  assert.equal(merged.failures.length, 0, 'the resolved failure is cleared');
+  assert.equal(
+    merged.teams.map((t) => t.trc).join(','),
+    '76720,76637',
+    'page order is preserved'
+  );
+  assert.equal(merged.generatedAt, '2026-08-22T12:05:00.000Z', 'timestamp is the newer pass');
+});
+
+test('mergeReports keeps a failure that is still failing', () => {
+  const first = F.buildReport([entries[0]], {
+    ...buildOpts,
+    failures: [
+      { trc: 76637, teamName: 'COALITION DELUSION', error: 'Timed out after 30s' },
+      { trc: 99999, teamName: 'COALITION PHANTOM', error: 'HTTP 500' }
+    ]
+  });
+  const retry = F.buildReport([entries[1]], {
+    ...buildOpts,
+    failures: [{ trc: 99999, teamName: 'COALITION PHANTOM', error: 'HTTP 429' }]
+  });
+
+  const merged = F.mergeReports(first, retry, [76720, 76637, 99999]);
+
+  assert.equal(merged.teamCount, 2);
+  assert.equal(merged.failures.length, 1, 'only the still-failing team remains');
+  assert.equal(merged.failures[0].trc, 99999);
+  assert.equal(merged.failures[0].error, 'HTTP 429', 'the newer error message wins');
+});
+
+test('mergeReports replaces a team rather than duplicating it', () => {
+  const first = F.buildReport(entries, buildOpts);
+  const refreshed = JSON.parse(JSON.stringify(entries[1]));
+  refreshed.data.riders = refreshed.data.riders.slice(0, 1);
+  const retry = F.buildReport([refreshed], buildOpts);
+
+  const merged = F.mergeReports(first, retry, [76720, 76637]);
+
+  assert.equal(merged.teamCount, 2, 'no duplicate team entry');
+  assert.equal(merged.riderCount, 7, '6 + the single refreshed rider');
+  assert.equal(merged.teams.find((t) => t.trc === 76637).riders.length, 1);
+});
+
+test('mergeReports without an order argument still merges', () => {
+  const first = F.buildReport([entries[0]], { ...buildOpts, failures: [] });
+  const retry = F.buildReport([entries[1]], buildOpts);
+  const merged = F.mergeReports(first, retry);
+  assert.equal(merged.teamCount, 2);
+  assert.equal(merged.riderCount, 8);
+});

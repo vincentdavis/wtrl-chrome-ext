@@ -63,6 +63,25 @@
       </fieldset>
 
       <fieldset>
+        <legend>Collection</legend>
+        <p class="note">
+          Each team is read one at a time. Transient failures (timeouts, rate
+          limits, server errors) are retried up to three times with a growing
+          delay, and the whole run slows down when WTRL shows strain. Raise the
+          timeout if you manage many teams or your connection is slow.
+        </p>
+        <label class="field">
+          Request timeout (seconds)
+          <input type="number" id="requestTimeoutSeconds" min="5" max="180" step="5" />
+          <span class="hint">Per team, per attempt. Default 30, range 5–180.</span>
+        </label>
+        <div class="actions">
+          <button id="saveCollection">Save</button>
+        </div>
+        <div class="note" id="collectionStatus" hidden></div>
+      </fieldset>
+
+      <fieldset>
         <legend>WTRL endpoint</legend>
         <p class="note">
           Learned automatically the first time you build a report — the extension

@@ -7,7 +7,8 @@ export const DEFAULTS = {
   authScheme: 'bearer', // 'bearer' | 'x-api-key'
   autoUpload: false,
   includeStats: false,
-  endpointTemplate: null
+  endpointTemplate: null,
+  requestTimeoutSeconds: 30
 };
 
 export async function getSettings() {

@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.3.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.4.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -63,6 +63,9 @@ The report is a sortable, filterable table of every rider across all your teams.
   `zwid`, so it catches the same person across different teams.
 - Pending invites are tinted amber and flagged in each team's header.
 - **zwid** links out to that rider's ZwiftPower profile.
+- **Retry failed teams** appears in the partial-report banner when some teams
+  could not be read. It re-reads only those teams and folds them into the report
+  you already have, so 18 good teams don't get thrown away to recover 3.
 - **Refresh** re-reads every team from WTRL without leaving the table. It reuses
   an open My Teams tab, or quietly opens one in the background and closes it
   again afterwards. Your filters and sort survive the refresh.
@@ -182,6 +185,28 @@ The template is cached, so later runs skip step 2 entirely. If a direct fetch
 fails, the extension falls back to expanding that team's panel. Panels are
 restored to whatever expanded/collapsed state you left them in.
 
+### Being a good citizen with a long roster
+
+A big roster is a burst of sequential requests, and WTRL starts refusing or
+stalling part-way through one. The extension handles that rather than dropping
+teams:
+
+- **Transient failures are retried** up to three times — timeouts, network
+  errors, `429 Too Many Requests`, and `5xx`. A `404`, or a response that isn't a
+  team payload (an expired session redirecting to a login page), is treated as
+  permanent and not retried.
+- **Backoff grows** between attempts (2s, then 4s), and a `Retry-After` header is
+  honoured over that if the server sends one.
+- **The whole run slows down** when the server shows strain, then eases back up
+  as teams start succeeding again — so one bad patch doesn't cascade.
+- **Failures record the HTTP status**, not just "timed out", so the Activity log
+  says what actually happened.
+- Anything still failing can be picked up later with **Retry failed teams**
+  instead of rebuilding everything.
+
+Raise **Request timeout** in Settings if you manage many teams or your connection
+is slow.
+
 Nothing is scraped out of rendered HTML, so cosmetic changes to WTRL's markup do
 not break the report.
 
@@ -272,9 +297,16 @@ Every other push uploads the same zip as a build artifact.
 <https://www.wtrl.racing/zrl/myteams/> and signed in. If the page is still
 loading the accordion, wait a moment and press **Build report** again.
 
-**A team times out.** Open **Activity log** in the build panel. If direct fetches
-are failing, go to Settings → **Forget template** and rebuild to relearn the
-endpoint.
+**Some teams time out on a big roster.** Transient failures are retried
+automatically with backoff, and the run slows itself down under strain. If teams
+still fail, open the report and press **Retry failed teams** in the banner — it
+re-reads only those teams and keeps the ones you already have. Raising
+**Request timeout** in Settings (default 30s) helps on slow connections.
+
+**A team fails every time.** Open **Activity log** in the build panel and read
+the status. A `404` or "not a team payload" usually means the endpoint moved or
+your session expired — go to Settings → **Forget template**, reload My Teams so
+you are definitely signed in, and rebuild to relearn the endpoint.
 
 **The Report button is missing.** Reload the page. The button is injected once
 the team accordion appears.

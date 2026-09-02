@@ -68,10 +68,9 @@ async function loadReport() {
   const failures = state.report.failures || [];
   $('partial').hidden = !failures.length;
   if (failures.length) {
-    $('partial').textContent =
+    $('partialText').textContent =
       `Partial report — ${failures.length} team(s) could not be read: ` +
-      failures.map((f) => `${f.teamName} (${f.error})`).join('; ') +
-      '. Refresh to try again.';
+      failures.map((f) => `${f.teamName} (${f.error})`).join('; ') + '. ';
   }
 
   buildTeamFilter();
@@ -431,10 +430,16 @@ async function waitForContentScript(tabId, timeoutMs = 30000) {
   return false;
 }
 
-async function refresh() {
-  const button = $('refresh');
-  if (button.disabled) return;
-  button.disabled = true;
+/**
+ * Drive the content script on a My Teams tab.
+ *
+ * `kind` is 'run-report' for a full rebuild or 'retry-failed' to re-read only
+ * the teams that failed and fold them into the existing report.
+ */
+async function runOnMyTeamsTab(kind, labels) {
+  const buttons = [$('refresh'), $('retryFailed')];
+  if (buttons.some((b) => b && b.disabled)) return;
+  buttons.forEach((b) => b && (b.disabled = true));
 
   let openedTab = null;
   try {
@@ -458,26 +463,26 @@ async function refresh() {
       return;
     }
 
-    setRefreshStatus('Rebuilding — reading each team in turn. This can take a moment…');
-    const result = await chrome.tabs.sendMessage(tab.id, { type: 'run-report' });
+    setRefreshStatus(labels.working);
+    const result = await chrome.tabs.sendMessage(tab.id, { type: kind });
 
     if (!result || !result.ok) {
-      setRefreshStatus((result && result.error) || 'Rebuild failed.', 'error');
+      setRefreshStatus((result && result.error) || labels.failed, 'error');
       return;
     }
 
     await loadReport();
     syncControls();
+
     const failed = (result.report.failures || []).length;
-    setRefreshStatus(
-      `Refreshed — ${result.report.teamCount} teams, ${result.report.riderCount} riders` +
-        (failed ? `, ${failed} team(s) failed.` : '.'),
-      failed ? 'warn' : 'ok'
-    );
+    setRefreshStatus(labels.done(result, failed), failed ? 'warn' : 'ok');
   } catch (error) {
-    setRefreshStatus('Refresh failed: ' + (error && error.message ? error.message : error), 'error');
+    setRefreshStatus(
+      labels.failed + ' ' + (error && error.message ? error.message : error),
+      'error'
+    );
   } finally {
-    button.disabled = false;
+    buttons.forEach((b) => b && (b.disabled = false));
     // Only clean up a tab we opened ourselves.
     if (openedTab) {
       try {
@@ -487,6 +492,24 @@ async function refresh() {
   }
 }
 
-$('refresh').addEventListener('click', refresh);
+$('refresh').addEventListener('click', () =>
+  runOnMyTeamsTab('run-report', {
+    working: 'Rebuilding — reading each team in turn. This can take a moment…',
+    failed: 'Rebuild failed.',
+    done: (result, failed) =>
+      `Refreshed — ${result.report.teamCount} teams, ${result.report.riderCount} riders` +
+      (failed ? `, ${failed} team(s) still failing.` : '.')
+  })
+);
+
+$('retryFailed').addEventListener('click', () =>
+  runOnMyTeamsTab('retry-failed', {
+    working: 'Retrying the failed teams, slowly — this backs off between attempts…',
+    failed: 'Retry failed.',
+    done: (result, failed) =>
+      `Retried ${result.retried} team(s), recovered ${result.recovered ?? 0}` +
+      (failed ? `; ${failed} still failing.` : '. Report is now complete.')
+  })
+);
 
 load();

@@ -16,11 +16,19 @@
 
   const VERSION = chrome.runtime.getManifest().version;
   const STORAGE_KEY_TEMPLATE = 'endpointTemplate';
-  const TEAM_TIMEOUT_MS = 20000;
-  const POLITE_DELAY_MS = 350;
+  const DEFAULT_TIMEOUT_MS = 30000;
+  const POLITE_DELAY_MS = 400;
   // Bootstrap ignores a toggle click while a collapse transition is running
   // (~350ms), so accordion clicks need a wider gap than the politeness delay.
   const TOGGLE_DELAY_MS = 600;
+
+  // A long roster is a burst of sequential requests, and WTRL starts refusing
+  // or stalling part-way through. Retry transient failures, and slow the whole
+  // run down as soon as the server shows strain rather than charging on.
+  const MAX_ATTEMPTS = 3;
+  const RETRY_BASE_MS = 2000;
+  const MAX_RETRY_WAIT_MS = 30000;
+  const MAX_PACE_MS = 4000;
 
   const state = {
     endpointTemplate: null,
@@ -28,7 +36,9 @@
     waiters: new Map(), // trc -> resolve fn
     pendingFetches: new Map(), // request id -> resolve fn
     running: false,
-    lastReport: null
+    lastReport: null,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+    paceMs: POLITE_DELAY_MS
   };
 
   // ===========================================================================
@@ -67,13 +77,13 @@
   }
 
   /** Ask the MAIN world to fetch a same-origin URL with the page's cookies. */
-  function pageFetch(url, timeoutMs = TEAM_TIMEOUT_MS) {
+  function pageFetch(url, timeoutMs) {
     return new Promise((resolve) => {
       const id = requestId();
       const timer = setTimeout(() => {
         state.pendingFetches.delete(id);
-        resolve({ ok: false, error: 'Timed out' });
-      }, timeoutMs);
+        resolve({ ok: false, timedOut: true, error: `Timed out after ${Math.round(timeoutMs / 1000)}s` });
+      }, timeoutMs || state.timeoutMs);
 
       state.pendingFetches.set(id, (result) => {
         clearTimeout(timer);
@@ -167,7 +177,7 @@
 
     let timer;
     const timeout = new Promise((resolve) => {
-      timer = setTimeout(() => resolve(null), TEAM_TIMEOUT_MS);
+      timer = setTimeout(() => resolve(null), state.timeoutMs);
     });
     const data = await Promise.race([settled, timeout]);
     clearTimeout(timer);
@@ -183,22 +193,67 @@
     return { ok: true, data };
   }
 
+  /** How long to wait before attempt N+1, honouring Retry-After when given. */
+  function retryDelay(attempt, result) {
+    if (result && Number.isFinite(result.retryAfter) && result.retryAfter > 0) {
+      return Math.min(result.retryAfter * 1000, MAX_RETRY_WAIT_MS);
+    }
+    const backoff = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+    const jitter = Math.random() * 500; // avoid lock-step retries
+    return Math.min(backoff + jitter, MAX_RETRY_WAIT_MS);
+  }
+
+  /** Back the whole run off once the server shows strain; recover gradually. */
+  function slowDown() {
+    state.paceMs = Math.min(Math.round(state.paceMs * 2), MAX_PACE_MS);
+  }
+
+  function speedUp() {
+    if (state.paceMs > POLITE_DELAY_MS) {
+      state.paceMs = Math.max(POLITE_DELAY_MS, Math.round(state.paceMs * 0.75));
+    }
+  }
+
   async function collectTeam(team) {
     if (state.captured.has(team.trc)) {
       return { ok: true, data: state.captured.get(team.trc) };
     }
 
+    let last = null;
+
     if (state.endpointTemplate) {
       const url = WTRLFormat.renderTemplate(state.endpointTemplate, team);
-      const result = await pageFetch(url);
-      if (result.ok && result.data) {
-        state.captured.set(team.trc, result.data);
-        return { ok: true, data: result.data };
+
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+        const result = await pageFetch(url, state.timeoutMs);
+        if (result.ok && result.data) {
+          state.captured.set(team.trc, result.data);
+          if (attempt > 1) log(`${team.name}: recovered on attempt ${attempt}.`);
+          return { ok: true, data: result.data };
+        }
+
+        last = result;
+        if (!WTRLFormat.isRetryableFailure(result) || attempt === MAX_ATTEMPTS) break;
+
+        slowDown();
+        const delay = retryDelay(attempt, result);
+        log(
+          `${team.name}: ${result.error} — retrying in ${Math.round(delay / 1000)}s ` +
+            `(attempt ${attempt + 1} of ${MAX_ATTEMPTS}).`
+        );
+        setProgress(null, null, `${team.name} failed; waiting ${Math.round(delay / 1000)}s…`);
+        await wait(delay);
       }
-      log(`Direct fetch failed for ${team.name} (${result.error}); falling back to panel click.`);
+
+      log(`${team.name}: direct fetch gave up (${last && last.error}); trying the panel.`);
+      slowDown();
     }
 
-    return collectByClick(team);
+    const clicked = await collectByClick(team);
+    if (clicked.ok) return clicked;
+
+    // Report whichever failure is more informative.
+    return { ok: false, error: last && last.error ? `${last.error} (panel: ${clicked.error})` : clicked.error };
   }
 
   // ===========================================================================
@@ -251,7 +306,8 @@
           <div class="wr-summary" hidden></div>
           <div class="wr-actions" hidden>
             <button class="wr-open wr-btn wr-btn-primary" type="button">Open report</button>
-            <button class="wr-retry wr-btn" type="button">Try again</button>
+            <button class="wr-retry-failed wr-btn" type="button" hidden>Retry failed teams</button>
+            <button class="wr-retry wr-btn" type="button">Rebuild all</button>
           </div>
           <details class="wr-log-wrap">
             <summary>Activity log</summary>
@@ -280,6 +336,7 @@
       actionsEl: $('.wr-actions'),
       openBtn: $('.wr-open'),
       retryBtn: $('.wr-retry'),
+      retryFailedBtn: $('.wr-retry-failed'),
       logEl: $('.wr-log')
     };
 
@@ -292,6 +349,7 @@
     });
     ui.openBtn.addEventListener('click', openReport);
     ui.retryBtn.addEventListener('click', () => buildThenOpen());
+    ui.retryFailedBtn.addEventListener('click', () => retryFailed());
 
     return ui;
   }
@@ -303,8 +361,10 @@
   function setProgress(done, total, message) {
     if (!ui) return;
     ui.progress.hidden = false;
-    const pct = total ? Math.round((done / total) * 100) : 0;
-    ui.barFill.style.width = pct + '%';
+    // done/total omitted means "same progress, new status" — don't zero the bar.
+    if (done !== null && done !== undefined && total) {
+      ui.barFill.style.width = Math.round((done / total) * 100) + '%';
+    }
     ui.statusEl.textContent = message;
   }
 
@@ -315,9 +375,60 @@
     ui.summaryEl.textContent = text;
   }
 
+  /** Walk a list of teams, collecting each and pacing between them. */
+  async function collectAll(teams) {
+    const entries = [];
+    const failures = [];
+
+    try {
+      for (let i = 0; i < teams.length; i += 1) {
+        const team = teams[i];
+        setProgress(i, teams.length, `Reading ${team.name} (${i + 1} of ${teams.length})…`);
+
+        let result;
+        try {
+          result = await collectTeam(team);
+        } catch (error) {
+          result = { ok: false, error: String(error && error.message ? error.message : error) };
+        }
+
+        if (result.ok) {
+          const riderCount = (result.data.riders || []).length;
+          entries.push({ team, data: result.data });
+          log(`${team.name}: ${riderCount} rider${riderCount === 1 ? '' : 's'}.`);
+          speedUp();
+        } else {
+          failures.push({ trc: team.trc, teamName: team.name, error: result.error });
+          log(`${team.name}: FAILED — ${result.error}`);
+        }
+
+        if (i < teams.length - 1) await wait(state.paceMs);
+      }
+    } finally {
+      state.running = false;
+      if (ui) ui.launcher.disabled = false;
+    }
+
+    setProgress(teams.length, teams.length, 'Done.');
+    return { entries, failures };
+  }
+
   // ===========================================================================
   // Actions
   // ===========================================================================
+
+  async function loadRunSettings() {
+    state.paceMs = POLITE_DELAY_MS;
+    try {
+      const stored = await chrome.storage.local.get(['requestTimeoutSeconds']);
+      const seconds = Number(stored.requestTimeoutSeconds);
+      state.timeoutMs = Number.isFinite(seconds) && seconds >= 5 && seconds <= 180
+        ? seconds * 1000
+        : DEFAULT_TIMEOUT_MS;
+    } catch (_) {
+      state.timeoutMs = DEFAULT_TIMEOUT_MS;
+    }
+  }
 
   async function hasStoredReport() {
     try {
@@ -339,7 +450,10 @@
     const result = await run();
     if (!result || !result.ok) return; // the panel already explains why
 
-    if (ui) ui.actionsEl.hidden = false;
+    if (ui) {
+      ui.actionsEl.hidden = false;
+      ui.retryFailedBtn.hidden = !(result.report.failures || []).length;
+    }
 
     // A partial report is worth showing, but not worth hiding the warning for.
     if (!(result.report.failures || []).length) {
@@ -386,6 +500,8 @@
       ui.logEl.textContent = '';
     }
 
+    await loadRunSettings();
+
     const stored = await chrome.storage.local.get([STORAGE_KEY_TEMPLATE]);
     if (stored[STORAGE_KEY_TEMPLATE] && !state.endpointTemplate) {
       state.endpointTemplate = stored[STORAGE_KEY_TEMPLATE];
@@ -394,38 +510,7 @@
 
     log(`Found ${teams.length} team${teams.length === 1 ? '' : 's'}.`);
 
-    const entries = [];
-    const failures = [];
-
-    try {
-      for (let i = 0; i < teams.length; i += 1) {
-        const team = teams[i];
-        setProgress(i, teams.length, `Reading ${team.name} (${i + 1} of ${teams.length})…`);
-
-        let result;
-        try {
-          result = await collectTeam(team);
-        } catch (error) {
-          result = { ok: false, error: String(error && error.message ? error.message : error) };
-        }
-
-        if (result.ok) {
-          const riderCount = (result.data.riders || []).length;
-          entries.push({ team, data: result.data });
-          log(`${team.name}: ${riderCount} rider${riderCount === 1 ? '' : 's'}.`);
-        } else {
-          failures.push({ trc: team.trc, teamName: team.name, error: result.error });
-          log(`${team.name}: FAILED — ${result.error}`);
-        }
-
-        if (i < teams.length - 1) await wait(POLITE_DELAY_MS);
-      }
-    } finally {
-      state.running = false;
-      if (ui) ui.launcher.disabled = false;
-    }
-
-    setProgress(teams.length, teams.length, 'Done.');
+    const { entries, failures } = await collectAll(teams);
 
     const report = WTRLFormat.buildReport(entries, { failures, extensionVersion: VERSION });
     state.lastReport = report;
@@ -445,6 +530,81 @@
     if (settings.autoUpload) await sendReport();
 
     return { ok: true, report };
+  }
+
+  /**
+   * Re-collect only the teams that failed, folding the results into the report
+   * that already exists. Someone who got 18 of 21 teams should not have to
+   * re-read all 21 to pick up the missing 3.
+   */
+  async function retryFailed() {
+    if (state.running) return { ok: false, error: 'A report is already running.' };
+
+    const stored = await chrome.storage.local.get(['lastReport']);
+    const previous = stored.lastReport && stored.lastReport.report;
+    const outstanding = (previous && previous.failures) || [];
+
+    if (!previous) return { ok: false, error: 'No report to retry — build one first.' };
+    if (!outstanding.length) return { ok: true, report: previous, retried: 0 };
+
+    const wanted = new Set(outstanding.map((failure) => failure.trc));
+    const onPage = discoverTeams();
+    const teams = onPage.filter((team) => wanted.has(team.trc));
+
+    if (!teams.length) {
+      return {
+        ok: false,
+        error: 'The failed teams are not on this page — reload My Teams and try again.'
+      };
+    }
+
+    state.running = true;
+    showPanel();
+    if (ui) {
+      ui.launcher.disabled = true;
+      ui.summaryEl.hidden = true;
+      ui.actionsEl.hidden = true;
+      ui.logEl.textContent = '';
+    }
+
+    await loadRunSettings();
+    // Start gently: these teams already failed once under normal pacing.
+    state.paceMs = Math.min(POLITE_DELAY_MS * 4, MAX_PACE_MS);
+
+    const stored2 = await chrome.storage.local.get([STORAGE_KEY_TEMPLATE]);
+    if (stored2[STORAGE_KEY_TEMPLATE] && !state.endpointTemplate) {
+      state.endpointTemplate = stored2[STORAGE_KEY_TEMPLATE];
+    }
+
+    log(`Retrying ${teams.length} failed team${teams.length === 1 ? '' : 's'}.`);
+
+    const { entries, failures } = await collectAll(teams);
+
+    const addition = WTRLFormat.buildReport(entries, { failures, extensionVersion: VERSION });
+    const report = WTRLFormat.mergeReports(
+      previous,
+      addition,
+      onPage.map((team) => team.trc)
+    );
+    state.lastReport = report;
+
+    try {
+      await chrome.runtime.sendMessage({ type: 'store-report', report });
+    } catch (_) {}
+
+    const recovered = teams.length - failures.length;
+    setSummary(
+      `Recovered ${recovered} of ${teams.length} team${teams.length === 1 ? '' : 's'} — ` +
+        `${report.teamCount} teams, ${report.riderCount} riders in total` +
+        (report.failures.length ? `, ${report.failures.length} still failing.` : '.'),
+      report.failures.length ? 'warn' : 'ok'
+    );
+    if (ui) {
+      ui.actionsEl.hidden = false;
+      ui.retryFailedBtn.hidden = !report.failures.length;
+    }
+
+    return { ok: true, report, retried: teams.length, recovered };
   }
 
   /**
@@ -479,6 +639,10 @@
     }
     if (message?.type === 'run-report') {
       run().then(sendResponse);
+      return true; // async response
+    }
+    if (message?.type === 'retry-failed') {
+      retryFailed().then(sendResponse);
       return true; // async response
     }
     return false;

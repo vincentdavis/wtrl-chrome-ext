@@ -120,13 +120,7 @@
       };
     });
 
-    // Flat rows: one per rider per team, carrying the team name for CSV/import.
-    const riders = [];
-    teams.forEach((team) => {
-      team.riders.forEach((rider) => {
-        riders.push(Object.assign({ teamName: team.teamName, trc: team.trc }, rider));
-      });
-    });
+    const riders = flattenTeams(teams);
 
     return {
       generatedAt: opts.generatedAt || new Date().toISOString(),
@@ -138,6 +132,80 @@
       teams,
       riders
     };
+  }
+
+  /** Flat rows: one per rider per team, carrying the team name for CSV/import. */
+  function flattenTeams(teams) {
+    const riders = [];
+    (teams || []).forEach((team) => {
+      (team.riders || []).forEach((rider) => {
+        riders.push(Object.assign({ teamName: team.teamName, trc: team.trc }, rider));
+      });
+    });
+    return riders;
+  }
+
+  /**
+   * Should a failed collection attempt be tried again?
+   *
+   * Timeouts, network errors, 429s and 5xx are transient — the server is busy or
+   * rate-limiting, and backing off usually clears it. A 404 or a response that
+   * is not a team payload (an expired session redirecting to a login page, say)
+   * will fail identically no matter how many times we ask.
+   */
+  function isRetryableFailure(result) {
+    if (!result) return true;
+    if (result.timedOut) return true;
+
+    const status = result.status;
+    if (status === undefined || status === null) return true; // network-level failure
+    if (status === 408 || status === 425 || status === 429) return true;
+    return status >= 500;
+  }
+
+  /**
+   * Fold a follow-up collection into an earlier report, so retrying the teams
+   * that failed keeps the ones that already succeeded.
+   *
+   * Teams present in `incoming` replace their earlier version; a failure is
+   * dropped as soon as any pass resolves that team. `order` is an optional list
+   * of trc values (page order) used to keep teams in their on-screen sequence.
+   */
+  function mergeReports(base, incoming, order) {
+    const byTrc = new Map();
+    (base.teams || []).forEach((team) => byTrc.set(team.trc, team));
+    (incoming.teams || []).forEach((team) => byTrc.set(team.trc, team));
+
+    let teams = Array.from(byTrc.values());
+    if (Array.isArray(order) && order.length) {
+      const rank = new Map(order.map((trc, i) => [trc, i]));
+      teams = teams.sort(
+        (a, b) =>
+          (rank.has(a.trc) ? rank.get(a.trc) : Number.MAX_SAFE_INTEGER) -
+          (rank.has(b.trc) ? rank.get(b.trc) : Number.MAX_SAFE_INTEGER)
+      );
+    }
+
+    const resolved = new Set(teams.map((team) => team.trc));
+    // Map.set keeps first-insertion order but takes the latest value, so
+    // failures stay in their original sequence while a retry's fresher error
+    // message replaces the stale one.
+    const failureByTrc = new Map();
+    [...(base.failures || []), ...(incoming.failures || [])].forEach((failure) => {
+      if (resolved.has(failure.trc)) return;
+      failureByTrc.set(failure.trc, failure);
+    });
+    const failures = Array.from(failureByTrc.values());
+
+    const riders = flattenTeams(teams);
+
+    return Object.assign({}, base, incoming, {
+      teams,
+      riders,
+      teamCount: teams.length,
+      riderCount: riders.length,
+      failures
+    });
   }
 
   /**
@@ -247,6 +315,9 @@
 
   root.WTRLFormat = {
     CORE_RIDER_FIELDS,
+    flattenTeams,
+    isRetryableFailure,
+    mergeReports,
     stripStats,
     ridersByZwid,
     multiTeamZwids,

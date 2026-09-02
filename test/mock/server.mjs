@@ -82,12 +82,46 @@ function injectShim(html) {
   return html.replace('</head>', shim + '</head>');
 }
 
+// Failure injection, so the retry/backoff paths can be exercised for real:
+//   /mock/fail?trc=76637&times=2&status=429   -> next 2 requests for that team fail
+//   /mock/reset                               -> clear all injected failures
+const failPlan = new Map();
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
+
+  if (url.pathname === '/mock/fail') {
+    const trc = url.searchParams.get('trc');
+    failPlan.set(trc, {
+      times: Number(url.searchParams.get('times') || 1),
+      status: Number(url.searchParams.get('status') || 429)
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, trc, plan: failPlan.get(trc) }));
+    return;
+  }
+
+  if (url.pathname === '/mock/reset') {
+    failPlan.clear();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
 
   // The "unknown" endpoint the extension has to discover for itself.
   if (url.pathname === '/zrl/api/v3/teamdetail') {
     const trc = url.searchParams.get('trc');
+
+    const plan = failPlan.get(trc);
+    if (plan && plan.times > 0) {
+      plan.times -= 1;
+      const headers = { 'Content-Type': 'application/json' };
+      if (plan.status === 429) headers['Retry-After'] = '1';
+      res.writeHead(plan.status, headers);
+      res.end(JSON.stringify({ error: 'injected failure', remaining: plan.times }));
+      return;
+    }
+
     const fixture = FIXTURES[trc];
     if (!fixture) {
       res.writeHead(404, { 'Content-Type': 'application/json' });

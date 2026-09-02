@@ -31,6 +31,7 @@ async function load() {
   $('authScheme').value = settings.authScheme;
   $('autoUpload').checked = settings.autoUpload;
   $('endpointTemplate').value = settings.endpointTemplate || '';
+  $('requestTimeoutSeconds').value = settings.requestTimeoutSeconds;
 
   await refreshPermissionState();
 }
@@ -94,6 +95,16 @@ $('test').addEventListener('click', async () => {
   } else {
     showNote('apiStatus', (response && response.error) || 'Test failed.', 'error');
   }
+});
+
+$('saveCollection').addEventListener('click', async () => {
+  const seconds = Number($('requestTimeoutSeconds').value);
+  if (!Number.isFinite(seconds) || seconds < 5 || seconds > 180) {
+    showNote('collectionStatus', 'Timeout must be between 5 and 180 seconds.', 'error');
+    return;
+  }
+  await setSettings({ requestTimeoutSeconds: seconds });
+  showNote('collectionStatus', `Timeout set to ${seconds}s.`, 'ok');
 });
 
 $('saveTemplate').addEventListener('click', async () => {

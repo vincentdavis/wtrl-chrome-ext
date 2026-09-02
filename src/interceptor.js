@@ -159,22 +159,43 @@
       })
       .then(({ response, text }) => {
         if (!response.ok) {
-          reply({ ok: false, status: response.status, error: 'HTTP ' + response.status });
+          // Pass Retry-After through so the caller can back off by as much as
+          // the server actually asked for.
+          let retryAfter = null;
+          try {
+            const header = response.headers.get('retry-after');
+            if (header) {
+              const seconds = Number(header);
+              if (Number.isFinite(seconds)) retryAfter = seconds;
+              else {
+                const when = Date.parse(header);
+                if (!Number.isNaN(when)) retryAfter = Math.max(0, (when - Date.now()) / 1000);
+              }
+            }
+          } catch (_) {}
+
+          reply({
+            ok: false,
+            status: response.status,
+            retryAfter,
+            error: 'HTTP ' + response.status + (response.statusText ? ' ' + response.statusText : '')
+          });
           return;
         }
         let data;
         try {
           data = JSON.parse(text);
         } catch (_) {
-          reply({ ok: false, error: 'Response was not JSON' });
+          reply({ ok: false, status: response.status, error: 'Response was not JSON' });
           return;
         }
         if (!looksLikeTeamPayload(data)) {
-          reply({ ok: false, error: 'Response was not a team payload' });
+          reply({ ok: false, status: response.status, error: 'Response was not a team payload' });
           return;
         }
         reply({ ok: true, url: response.url || target.href, data });
       })
+      // No status: a network-level failure, which is worth retrying.
       .catch((err) => reply({ ok: false, error: String((err && err.message) || err) }));
   });
 
