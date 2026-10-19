@@ -133,3 +133,43 @@ tr.team-rider td:first-child {
 }
 
 .coverage.partial { color: var(--warn); }
+
+/* --------------------------------------------------------- heatmap cells --- */
+
+/* 14px bold is the size at which WCAG AA asks 3:1 rather than 4.5:1, which a
+   continuous gradient can actually hold across its whole range. */
+td.heat {
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.25);
+}
+
+/* The row hover tint would wash the fills out. */
+tbody tr:hover td.heat { filter: brightness(1.12); }
+
+td.heat.best::after {
+  content: '★';
+  margin-left: 4px;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.palette-pick {
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.palette-pick select {
+  min-width: 150px;
+  width: auto;
+}
+
+.palette-note {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.palette-note.unsafe { color: var(--warn); }

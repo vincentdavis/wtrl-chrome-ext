@@ -9,7 +9,8 @@ export const DEFAULTS = {
   includeStats: false,
   endpointTemplate: null,
   requestTimeoutSeconds: 30,
-  zwiftPowerTeamId: null
+  zwiftPowerTeamId: null,
+  heatPalette: 'redgreen'
 };
 
 export async function getSettings() {

@@ -10,6 +10,7 @@ const state = {
   sortKey: 'position',
   sortDir: 1,
   careerCache: new Map(),
+  palette: WTRLHeat.DEFAULT_PALETTE,
   view: 'rider',          // 'rider' | 'team'
   teamSort: 'position',
   teamSortDir: 1,
@@ -83,7 +84,13 @@ function valueFor(rider, column) {
 
 async function load() {
   $('version').textContent = 'v' + chrome.runtime.getManifest().version;
-  const stored = await chrome.storage.local.get(['lastRace']);
+
+  const stored = await chrome.storage.local.get(['lastRace', 'heatPalette']);
+  if (stored.heatPalette && WTRLHeat.paletteNames().includes(stored.heatPalette)) {
+    state.palette = stored.heatPalette;
+  }
+  buildPalettePicker();
+
   const entry = stored.lastRace;
 
   const has = !!(entry && entry.report && (entry.report.riders || []).length);
@@ -213,16 +220,22 @@ function sortRows(rows) {
   });
 }
 
-/** Rank a curve value against the field so a column reads at a glance. */
-function levelFor(rows, column, value) {
-  if (typeof value !== 'number') return '0';
-  const vals = rows.map((r) => valueFor(r, column)).filter((v) => typeof v === 'number');
-  if (vals.length < 3) return '2';
-  const sorted = vals.slice().sort((a, b) => a - b);
-  const q = (p) => sorted[Math.floor((sorted.length - 1) * p)];
-  if (value >= q(0.9)) return '3';
-  if (value >= q(0.5)) return '2';
-  return '1';
+/**
+ * Paint a cell against the spread of its own column.
+ *
+ * Each column is scaled separately — a 5s w/kg and a 20m w/kg are not
+ * comparable numbers, so colouring them on one scale would be nonsense.
+ */
+function paintHeat(td, scale, value) {
+  td.classList.add('heat');
+  const style = scale ? WTRLHeat.cellStyle(scale(value), state.palette) : null;
+  if (!style) {
+    td.style.background = '';
+    td.style.color = '';
+    return;
+  }
+  td.style.background = style.background;
+  td.style.color = style.color;
 }
 
 function render() {
@@ -241,6 +254,12 @@ function render() {
     body.innerHTML = `<tr><td class="empty-row" colspan="${cols.length}">Nothing matches these filters.</td></tr>`;
     return;
   }
+
+  // One scale per column, built from the rows actually on screen.
+  const scales = new Map();
+  cols.filter((c) => c.duration).forEach((column) => {
+    scales.set(column.key, WTRLHeat.scaleFor(sorted.map((r) => valueFor(r, column))));
+  });
 
   sorted.forEach((rider) => {
     const tr = document.createElement('tr');
@@ -280,7 +299,7 @@ function render() {
       } else if (column.duration) {
         const p = curveAt(rider, column.duration);
         td.className = 'curve-cell' + (column.align ? ' align-' + column.align : '');
-        td.dataset.level = levelFor(sorted, column, value);
+        paintHeat(td, scales.get(column.key), value);
         if (p && p.best) td.classList.add('best');
         td.textContent = typeof value === 'number' ? value.toFixed(state.showWatts ? 0 : 1) : '—';
       } else {
@@ -362,6 +381,16 @@ function renderTeams() {
       state.teamSortDir;
   });
 
+  // Weight is shaded nowhere: higher is not better, so a colour scale on it
+  // would imply a ranking that does not exist.
+  const heatCols = TEAM_COLUMNS.filter(
+    (c) => /^(avg|best|median)\./.test(c.key) && !/weight/i.test(c.key)
+  );
+  const teamScales = new Map();
+  heatCols.forEach((column) => {
+    teamScales.set(column.key, WTRLHeat.scaleFor(sorted.map((t) => dig(t, column.key))));
+  });
+
   sorted.forEach((team) => {
     const open = state.expanded.has(team.teamName);
     const tr = document.createElement('tr');
@@ -390,6 +419,7 @@ function renderTeams() {
           td.title = `${team.riderCount - team.matchedCount} rider(s) have no ZwiftPower data; averages exclude them`;
         }
       } else {
+        if (teamScales.has(column.key)) paintHeat(td, teamScales.get(column.key), value);
         td.textContent =
           typeof value === 'number'
             ? (column.key.includes('wkg') || column.key.includes('Wkg')
@@ -506,6 +536,35 @@ async function showCareer(rider) {
 }
 
 $('careerClose').addEventListener('click', () => { $('career').hidden = true; });
+
+/** Palette picker, remembered across sessions. */
+function buildPalettePicker() {
+  const select = $('palette');
+  select.innerHTML = WTRLHeat.paletteNames()
+    .map((name) => {
+      const info = WTRLHeat.paletteInfo(name);
+      return `<option value="${name}">${escapeHtml(info.label)}${info.safe ? '' : ' *'}</option>`;
+    })
+    .join('');
+  select.value = state.palette;
+  select.title = paletteHint();
+
+  select.addEventListener('change', async (event) => {
+    state.palette = event.target.value;
+    select.title = paletteHint();
+    try {
+      await chrome.storage.local.set({ heatPalette: state.palette });
+    } catch (_) {}
+    render();
+  });
+}
+
+function paletteHint() {
+  const info = WTRLHeat.paletteInfo(state.palette);
+  return info.safe
+    ? info.note
+    : info.note + ' — starred palettes are not safe for red-green colour blindness';
+}
 
 function setView(view) {
   state.view = view;

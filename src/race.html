@@ -40,6 +40,10 @@
         <select id="catFilter" aria-label="Category"></select>
         <label class="check"><input type="checkbox" id="matchedOnly" checked /> Matched only</label>
         <label class="check"><input type="checkbox" id="showWatts" /> Show watts</label>
+        <label class="check palette-pick">
+          Shading
+          <select id="palette" aria-label="Heatmap colours"></select>
+        </label>
         <button id="reset">Reset</button>
       </section>
 
@@ -68,6 +72,7 @@
     </footer>
 
     <script src="race-format.js"></script>
+    <script src="heatmap.js"></script>
     <script src="report-format.js"></script>
     <script type="module" src="race.js"></script>
   </body>

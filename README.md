@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.8.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.9.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -153,13 +153,37 @@ is visible rather than misleading.
 **Export view (CSV)** follows the toggle: team aggregates in team view, riders
 in rider view.
 
+### Colours
+
+Each column is shaded on its own scale — a 5s w/kg and a 20m w/kg are not
+comparable numbers, so one scale across both would be meaningless. The
+**Shading** picker offers:
+
+| Palette | Colour-blind safe |
+| --- | --- |
+| Red → green (default) | **No** — this is the pairing deuteranopia and protanopia cannot separate |
+| Viridis | Yes, perceptually even |
+| Cividis | Yes, designed for colour-blind viewers |
+| Blue → orange | Yes, diverging |
+| Monochrome | Yes, lightness only |
+| No shading | — |
+
+Unsafe palettes are marked with `*` in the picker. Every safe palette also runs
+monotonically from dark to light, so the ranking survives without colour vision
+at all — a test asserts that, and that each palette holds at least 3:1 text
+contrast across its range (heat cells render at 14px bold, where that is the
+WCAG AA bar) and 4.5:1 at the ends. Your choice is remembered.
+
+Weight is never shaded: heavier is not better, so a colour scale on it would
+imply a ranking that does not exist.
+
 ### Rider view
 
 Per rider:
 
-- **Power curve** at 5s, 15s, 30s, 1m, 2m, 5m and 20m, in w/kg or watts. Values
-  are shaded against the field so a standout effort is visible down a column,
-  and ZwiftPower's own personal-best flag is marked with a star.
+- **Power curve** at 5s, 15s, 30s, 1m, 2m, 5m and 20m, in w/kg or watts, shaded
+  as a heatmap so a standout effort is visible down a column. ZwiftPower's own
+  personal-best flag is marked with a star.
 - Weight, race FTP, normalised power, average w/kg, category, and whether the
   rider is **verified** (ZADA).
 - Their ZRL team from WTRL, next to their club from ZwiftPower.
