@@ -211,16 +211,40 @@
     await collect();
   }
 
-  async function collect() {
+  /**
+   * Collect a race.
+   *
+   * With no target this uses whatever the page currently shows. With one, it
+   * fetches that race directly, so the report pages can pick any league,
+   * division and round without the user driving WTRL's own dropdowns.
+   */
+  async function collect(target) {
     if (state.running) return { ok: false, error: 'Already running.' };
 
-    if (!state.resultsPayload) {
+    let payload = state.resultsPayload;
+    let meta = raceMetaFromUrl(state.resultsUrl);
+
+    if (target && target.class && target.round) {
+      const season = target.season || meta.season || 20;
+      const fetched = await pageFetch(
+        `/api/zrl/results/${season}/${target.class}/${target.round}`
+      );
+      if (!fetched.ok || !fetched.data) {
+        ui.panel.hidden = false;
+        setResult(`Could not load that race (${(fetched && fetched.error) || 'no response'}).`, 'error');
+        return { ok: false, error: 'Could not load the requested race' };
+      }
+      payload = fetched.data;
+      meta = { season: Number(season), class: target.class, round: Number(target.round) };
+    }
+
+    if (!payload) {
       ui.panel.hidden = false;
       setResult('No race loaded yet. Pick a league, division and round on the page, then try again.', 'error');
       return { ok: false, error: 'No results payload seen yet' };
     }
 
-    const zid = WTRLRace.eventIdFrom(state.resultsPayload);
+    const zid = WTRLRace.eventIdFrom(payload);
     if (!zid) {
       ui.panel.hidden = false;
       setResult('This race has no Zwift event id, so it cannot be matched to ZwiftPower.', 'error');
@@ -234,8 +258,7 @@
     ui.actionsEl.hidden = true;
     ui.logEl.textContent = '';
 
-    const meta = raceMetaFromUrl(state.resultsUrl);
-    const wtrlCount = WTRLRace.wtrlRiders(state.resultsPayload).length;
+    const wtrlCount = WTRLRace.wtrlRiders(payload).length;
     log(`Race ${meta.class || '?'} round ${meta.round ?? '?'} — ${wtrlCount} riders, Zwift event ${zid}.`);
 
     try {
@@ -253,6 +276,17 @@
       const zpRows = (zp.data && zp.data.data) || [];
       log(`ZwiftPower returned ${zpRows.length} riders for this event.`);
 
+      // The index drives the league / division / race pickers on the report
+      // page, and tells us each race's format.
+      const idx = await pageFetch(`/api/zrl/results/${meta.season || 20}`);
+      if (idx.ok && idx.data) {
+        try {
+          await chrome.storage.local.set({
+            resultsIndex: { season: meta.season || 20, fetchedAt: new Date().toISOString(), data: idx.data }
+          });
+        } catch (_) {}
+      }
+
       // Season standings for the same division, for the league view.
       setProgress(60, 'Fetching league standings…');
       let standings = [];
@@ -268,13 +302,21 @@
 
       setProgress(80, 'Matching riders…');
       const report = WTRLRace.buildRaceReport({
-        wtrlPayload: state.resultsPayload,
+        wtrlPayload: payload,
         zpRows,
         race: meta,
         extensionVersion: VERSION
       });
 
       report.league = standings;
+      // Race name and format: a TTT has no FAL/FTS/FIN points by design.
+      if (idx.ok && idx.data) {
+        const raceMeta = WTRLRace.findRaceMeta(idx.data, meta.class, meta.round);
+        if (raceMeta) {
+          report.race = Object.assign({}, report.race, raceMeta);
+          log(`${raceMeta.raceName} (${raceMeta.format}).`);
+        }
+      }
       state.lastRace = report;
       await chrome.runtime.sendMessage({ type: 'store-race', report });
 
@@ -313,7 +355,7 @@
       return true;
     }
     if (message?.type === 'collect-race') {
-      collect().then(sendResponse);
+      collect(message.target).then(sendResponse);
       return true;
     }
     return false;

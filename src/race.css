@@ -189,3 +189,50 @@ td.penalty {
   opacity: 0.4;
   cursor: default;
 }
+
+/* ----------------------------------------------------------- race picker --- */
+
+.racepicker {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-soft);
+}
+
+.racepicker[hidden] { display: none; }
+
+.racepicker select { width: auto; min-width: 130px; }
+.racepicker select#pickRound { min-width: 240px; }
+
+.picker-label {
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.picker-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.picker-note.busy { color: var(--warn); }
+.picker-note.error { color: var(--accent-soft); }
+
+/* A format with no per-rider points, e.g. a team time trial. */
+.format-note {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 183, 3, 0.4);
+  background: var(--bg-soft);
+  color: var(--warn);
+  font-size: 12.5px;
+}
+
+.format-note[hidden] { display: none; }

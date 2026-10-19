@@ -60,7 +60,8 @@ window.chrome = {
       get: async (keys) => {
         const store = {
           lastReport: window.__MOCK_LAST_REPORT || null,
-          lastRace: window.__MOCK_LAST_RACE || null
+          lastRace: window.__MOCK_LAST_RACE || null,
+          resultsIndex: window.__MOCK_RESULTS_INDEX || null
         };
         const out = {};
         (Array.isArray(keys) ? keys : [keys]).forEach((k) => {

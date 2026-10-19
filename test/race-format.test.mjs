@@ -591,3 +591,66 @@ test('an empty league payload is handled', () => {
   assert.deepEqual(R.mapLeagueStandings({}).length, 0);
   assert.equal(R.roundsPlayed([]), 0);
 });
+
+// ------------------------------------------------------------ race format ---
+
+const RESULTS_INDEX = {
+  payload: {
+    competition: [
+      {
+        value: '20',
+        text: 'Open Regular',
+        leagues: [
+          {
+            value: 120, text: 'Cherry',
+            divisions: [
+              { value: 'A1', races: [
+                { value: 1, text: 'Race 1: Innsbruckring PTS (Finalized)', format: 'PTS' },
+                { value: 2, text: 'Race 2: Makuri 40 PTS (Finalized)', format: 'PTS' },
+                { value: 3, text: 'Race 3: Watopia Figure 8 Reverse TTT (Finalized)', format: 'TTT' }
+              ] }
+            ]
+          },
+          {
+            value: 250, text: 'Orange',
+            divisions: [{ value: 'B1', races: [{ value: 1, text: 'Race 1: X PTS', format: 'PTS' }] }]
+          }
+        ]
+      }
+    ]
+  }
+};
+
+test('parseClassCode splits a results class into league and division', () => {
+  assert.equal(JSON.stringify(R.parseClassCode('2120A10')),
+    JSON.stringify({ prefix: '2', leagueId: 120, division: 'A1' }));
+  assert.equal(JSON.stringify(R.parseClassCode('2250B10')),
+    JSON.stringify({ prefix: '2', leagueId: 250, division: 'B1' }));
+  assert.equal(R.parseClassCode('nonsense'), null);
+  assert.equal(R.parseClassCode(''), null);
+});
+
+test('findRaceMeta recovers a race name and format', () => {
+  const meta = R.findRaceMeta(RESULTS_INDEX, '2120A10', 3);
+  assert.equal(meta.leagueName, 'Cherry');
+  assert.equal(meta.division, 'A1');
+  assert.equal(meta.raceName, 'Race 3: Watopia Figure 8 Reverse TTT (Finalized)');
+  assert.equal(meta.format, 'TTT');
+  assert.equal(meta.finalized, true, 'it is finalized — it simply has no rider points');
+});
+
+test('findRaceMeta returns null rather than guessing', () => {
+  assert.equal(R.findRaceMeta(RESULTS_INDEX, '2120A10', 9), null, 'no such round');
+  assert.equal(R.findRaceMeta(RESULTS_INDEX, '2999Z10', 1), null, 'no such division');
+  assert.equal(R.findRaceMeta(null, '2120A10', 1), null);
+});
+
+test('formatHasRiderPoints knows which formats score riders', () => {
+  // A TTT is scored on team time: FAL/FTS/FIN do not exist for it, so a column
+  // of zeros is correct data rather than a gap, and must be labelled not hidden.
+  assert.equal(R.formatHasRiderPoints('TTT'), false);
+  assert.equal(R.formatHasRiderPoints('ttt'), false);
+  assert.equal(R.formatHasRiderPoints('PTS'), true);
+  assert.equal(R.formatHasRiderPoints('SCR'), true);
+  assert.equal(R.formatHasRiderPoints(null), true, 'unknown formats assume normal scoring');
+});

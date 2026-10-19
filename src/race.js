@@ -120,8 +120,16 @@ const BASE_COLUMNS = [
 
 const durations = () => (window.WTRLRace ? WTRLRace.DURATIONS : []);
 
+const POINTS_KEYS = ['falPoints', 'ftsPoints', 'finPoints', 'pbpPoints', 'totalPoints'];
+
+/** A TTT awards no rider points, so those columns are noise there. */
+function pointsApply() {
+  const fmt = state.report && state.report.race && state.report.race.format;
+  return WTRLRace.formatHasRiderPoints(fmt);
+}
+
 function columns() {
-  return BASE_COLUMNS.concat(
+  return BASE_COLUMNS.filter((c) => pointsApply() || !POINTS_KEYS.includes(c.key)).concat(
     durations().map((d) => ({
       key: 'curve_' + d.key,
       label: d.label,
@@ -166,13 +174,32 @@ async function load() {
     const el = document.querySelector(sel);
     if (el) el.hidden = !has;
   });
-  if (!has) return;
+  if (!has) {
+    // The picker is most useful with nothing loaded — it is how you choose a
+    // first race — so build it before bailing out.
+    await buildRacePicker();
+    return;
+  }
 
   state.report = entry.report;
   const race = state.report.race || {};
   $('raceMeta').textContent =
-    `${race.class || 'division'} · round ${race.round ?? '?'} · Zwift event ${race.zid ?? '?'} · ` +
-    new Date(state.report.generatedAt).toLocaleString();
+    [
+      race.leagueName ? `${race.leagueName} ${race.division || ''}`.trim() : race.class || 'division',
+      race.raceName || `round ${race.round ?? '?'}`,
+      `Zwift event ${race.zid ?? '?'}`,
+      new Date(state.report.generatedAt).toLocaleString()
+    ].join(' · ');
+
+  const fmt = race.format || null;
+  const noRiderPoints = fmt && !WTRLRace.formatHasRiderPoints(fmt);
+  $('formatNote').hidden = !noRiderPoints;
+  if (noRiderPoints) {
+    $('formatNote').textContent =
+      `${race.raceName || 'This race'} is a ${fmt}. That format is scored on team time, ` +
+      'so FAL, FTS and FIN points do not exist for it — those columns are hidden rather ' +
+      'than showing a wall of zeros.';
+  }
 
   const missed = state.report.unmatched || [];
   $('unmatched').hidden = !missed.length;
@@ -191,6 +218,9 @@ async function load() {
   renderTiles();
   renderHead();
   render();
+
+  // After state.report, so the pickers can default to the race on screen.
+  await buildRacePicker();
 }
 
 function buildFilters() {
@@ -667,6 +697,183 @@ function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
   );
+}
+
+// ============================================================= race picker ===
+
+const MYTEAMS_RESULTS = 'https://www.wtrl.racing/zrl/results/';
+const RESULTS_PATTERNS = [
+  'https://www.wtrl.racing/zrl/results*',
+  'https://wtrl.racing/zrl/results*'
+];
+
+let indexData = null;
+
+const competitions = () =>
+  (indexData && ((indexData.payload && indexData.payload.competition) || indexData.competition)) || [];
+
+const leaguesFor = (compValue) => {
+  const c = competitions().find((x) => String(x.value) === String(compValue));
+  return (c && c.leagues) || [];
+};
+
+const divisionsFor = (compValue, leagueValue) => {
+  const l = leaguesFor(compValue).find((x) => String(x.value) === String(leagueValue));
+  return (l && l.divisions) || [];
+};
+
+const racesFor = (compValue, leagueValue, divValue) => {
+  const d = divisionsFor(compValue, leagueValue).find((x) => String(x.value) === String(divValue));
+  return (d && d.races) || [];
+};
+
+const fill = (select, items, selected) => {
+  select.innerHTML = items
+    .map((i) => `<option value="${escapeHtml(String(i.value))}">${escapeHtml(i.label)}</option>`)
+    .join('');
+  if (selected !== undefined && selected !== null) select.value = String(selected);
+};
+
+/** Class code for the chosen league + division, as WTRL builds it. */
+function classCodeFor(leagueValue, divisionValue) {
+  return '2' + String(leagueValue).padStart(3, '0') + divisionValue + '0';
+}
+
+function setPickerNote(text, tone) {
+  $('pickNote').textContent = text || '';
+  $('pickNote').className = 'picker-note' + (tone ? ' ' + tone : '');
+}
+
+let pickerBound = false;
+
+async function buildRacePicker() {
+  const stored = await chrome.storage.local.get(['resultsIndex']);
+  if (!stored.resultsIndex || !stored.resultsIndex.data) {
+    $('racePicker').hidden = true;
+    return;
+  }
+  indexData = stored.resultsIndex.data;
+  $('racePicker').hidden = false;
+
+  // Default the pickers to the race currently loaded.
+  const race = (state.report && state.report.race) || {};
+  const parsed = race.class ? WTRLRace.parseClassCode(race.class) : null;
+
+  const comps = competitions();
+  let comp = comps[0] && comps[0].value;
+  if (parsed) {
+    const owning = comps.find((c) =>
+      (c.leagues || []).some((l) => Number(l.value) === parsed.leagueId)
+    );
+    if (owning) comp = owning.value;
+  }
+
+  fill($('pickCompetition'), comps.map((c) => ({ value: c.value, label: c.text })), comp);
+  syncLeagues(parsed ? parsed.leagueId : null, parsed ? parsed.division : null, race.round);
+
+  // load() re-runs after each collection; bind the handlers only once.
+  if (pickerBound) return;
+  pickerBound = true;
+
+  ['pickCompetition', 'pickLeague', 'pickDivision'].forEach((id) => {
+    $(id).addEventListener('change', () => {
+      if (id === 'pickCompetition') syncLeagues();
+      else if (id === 'pickLeague') syncDivisions();
+      else syncRaces();
+    });
+  });
+
+  $('pickLoad').addEventListener('click', loadChosenRace);
+}
+
+function syncLeagues(preferLeague, preferDiv, preferRound) {
+  const comp = $('pickCompetition').value;
+  const leagues = leaguesFor(comp);
+  fill(
+    $('pickLeague'),
+    leagues.map((l) => ({ value: l.value, label: l.text })),
+    preferLeague ?? (leagues[0] && leagues[0].value)
+  );
+  syncDivisions(preferDiv, preferRound);
+}
+
+function syncDivisions(preferDiv, preferRound) {
+  const divisions = divisionsFor($('pickCompetition').value, $('pickLeague').value);
+  fill(
+    $('pickDivision'),
+    divisions.map((d) => ({ value: d.value, label: 'Division ' + d.text })),
+    preferDiv ?? (divisions[0] && divisions[0].value)
+  );
+  syncRaces(preferRound);
+}
+
+function syncRaces(preferRound) {
+  const races = racesFor(
+    $('pickCompetition').value,
+    $('pickLeague').value,
+    $('pickDivision').value
+  );
+  fill(
+    $('pickRound'),
+    races.map((r) => ({ value: r.value, label: r.text })),
+    preferRound ?? (races[0] && races[0].value)
+  );
+  setPickerNote(races.length ? '' : 'No races recorded for this division yet.');
+}
+
+/** Collect the chosen race, driving the content script on a WTRL tab. */
+async function loadChosenRace() {
+  const target = {
+    season: (state.report && state.report.race && state.report.race.season) || 20,
+    class: classCodeFor($('pickLeague').value, $('pickDivision').value),
+    round: Number($('pickRound').value)
+  };
+
+  $('pickLoad').disabled = true;
+  let openedTab = null;
+  try {
+    setPickerNote('Finding a WTRL results tab…', 'busy');
+    const existing = await chrome.tabs.query({ url: RESULTS_PATTERNS });
+    let tab = existing[0] || null;
+    if (!tab) {
+      tab = await chrome.tabs.create({ url: MYTEAMS_RESULTS, active: false });
+      openedTab = tab;
+    }
+
+    setPickerNote('Waiting for the page…', 'busy');
+    const deadline = Date.now() + 30000;
+    let ready = false;
+    while (Date.now() < deadline && !ready) {
+      await new Promise((r) => setTimeout(r, 500));
+      try {
+        const pong = await chrome.tabs.sendMessage(tab.id, { type: 'race-ping' });
+        ready = !!(pong && pong.ok);
+      } catch (_) {}
+    }
+    if (!ready) {
+      setPickerNote('Could not reach WTRL. Make sure you are signed in.', 'error');
+      return;
+    }
+
+    setPickerNote('Collecting race and ZwiftPower power…', 'busy');
+    const result = await chrome.tabs.sendMessage(tab.id, { type: 'collect-race', target });
+    if (!result || !result.ok) {
+      setPickerNote((result && result.error) || 'Could not load that race.', 'error');
+      return;
+    }
+
+    await load();
+    setPickerNote('Loaded.', null);
+  } catch (error) {
+    setPickerNote('Failed: ' + (error && error.message ? error.message : error), 'error');
+  } finally {
+    $('pickLoad').disabled = false;
+    if (openedTab) {
+      try {
+        await chrome.tabs.remove(openedTab.id);
+      } catch (_) {}
+    }
+  }
 }
 
 // ================================================================== career ===

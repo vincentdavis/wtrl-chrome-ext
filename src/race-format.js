@@ -255,6 +255,59 @@
   }
 
   /**
+   * Split a results class code into its league and division.
+   *
+   * WTRL builds it as "2" + league id (3 digits) + division + "0", so
+   * "2120A10" is Cherry (120) division A1, and "2250B10" is Orange (250) B1.
+   */
+  function parseClassCode(code) {
+    const text = String(code || '');
+    const match = text.match(/^(\d)(\d{3})(.+?)0$/);
+    if (!match) return null;
+    return { prefix: match[1], leagueId: Number(match[2]), division: match[3] };
+  }
+
+  /**
+   * Find a race in the results index, for its name and format.
+   *
+   * The format matters: a TTT is scored on team time and has no FAL, FTS or
+   * FIN points at all, so a table of zeros there is the correct answer rather
+   * than missing data, and should be labelled as such.
+   */
+  function findRaceMeta(index, classCode, round) {
+    const parsed = parseClassCode(classCode);
+    if (!parsed || !index) return null;
+
+    const competitions = (index.payload && index.payload.competition) || index.competition || [];
+    for (const competition of competitions) {
+      for (const league of competition.leagues || []) {
+        if (Number(league.value) !== parsed.leagueId) continue;
+        for (const division of league.divisions || []) {
+          if (String(division.value) !== parsed.division) continue;
+          const race = (division.races || []).find((r) => Number(r.value) === Number(round));
+          if (!race) continue;
+          return {
+            leagueName: league.text || null,
+            division: parsed.division,
+            raceName: race.text || null,
+            format: race.format || null,
+            finalized: /\(finalized\)/i.test(race.text || '')
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  /** Formats that award FAL / FTS / FIN points to individual riders. */
+  const POINTS_FORMATS = ['PTS', 'SCR'];
+
+  function formatHasRiderPoints(format) {
+    if (!format) return true; // unknown: assume normal scoring
+    return POINTS_FORMATS.includes(String(format).toUpperCase());
+  }
+
+  /**
    * League standings for a division.
    *
    * WTRL serves this with single-letter keys. The mapping below was decoded by
@@ -613,6 +666,10 @@
   }
 
   root.WTRLRace = {
+    parseClassCode,
+    findRaceMeta,
+    formatHasRiderPoints,
+    POINTS_FORMATS,
     mapLeagueStandings,
     roundsPlayed,
     wtrlTeams,

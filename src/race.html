@@ -28,8 +28,19 @@
       </div>
 
       <div class="note warn" id="unmatched" hidden></div>
+      <div class="format-note" id="formatNote" hidden></div>
 
       <section class="tiles" id="tiles"></section>
+
+      <section class="racepicker" id="racePicker" hidden>
+        <span class="picker-label">Race</span>
+        <select id="pickCompetition" aria-label="Competition"></select>
+        <select id="pickLeague" aria-label="League"></select>
+        <select id="pickDivision" aria-label="Division"></select>
+        <select id="pickRound" aria-label="Race"></select>
+        <button id="pickLoad" class="primary">Load</button>
+        <span class="picker-note" id="pickNote"></span>
+      </section>
 
       <div class="viewtabs" role="tablist">
         <button id="viewTeam" class="viewtab" role="tab">Team view</button>

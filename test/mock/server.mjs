@@ -105,6 +105,12 @@ function mockStoredRace() {
     if (report.league[i]) report.league[i].teamName = team.teamName;
   });
 
+  report.race = Object.assign({}, report.race, {
+    leagueName: 'Cherry', division: 'A1',
+    raceName: 'Race 3: Watopia Figure 8 Reverse TTT (Finalized)',
+    format: 'TTT', finalized: true
+  });
+
   return {
     generatedAt: report.generatedAt,
     race: report.race,
@@ -114,11 +120,41 @@ function mockStoredRace() {
   };
 }
 
+/** A trimmed results index, enough to drive the league / division pickers. */
+function mockResultsIndex() {
+  const races = [
+    { value: 1, text: 'Race 1: Innsbruckring PTS (Finalized)', format: 'PTS' },
+    { value: 2, text: 'Race 2: Makuri 40 PTS (Finalized)', format: 'PTS' },
+    { value: 3, text: 'Race 3: Watopia Figure 8 Reverse TTT (Finalized)', format: 'TTT' }
+  ];
+  const divisions = ['A1', 'B1', 'C1'].map((value) => ({ value, text: value, races }));
+  return {
+    season: 20,
+    fetchedAt: new Date().toISOString(),
+    data: {
+      success: true,
+      payload: {
+        seasons: [{ value: 20, text: 'Season 20', round: 1 }],
+        competition: [
+          { value: '20', text: 'Open Regular', leagues: [
+            { value: 120, text: 'Cherry', divisions },
+            { value: 250, text: 'Orange', divisions }
+          ] },
+          { value: '00', text: "Women's Regular", leagues: [
+            { value: 160, text: 'Pink', divisions }
+          ] }
+        ]
+      }
+    }
+  };
+}
+
 /** Extension pages need chrome.* to exist before their module scripts run. */
 function injectShim(html) {
   const shim =
     `<script>window.__MOCK_LAST_REPORT = ${JSON.stringify(mockStoredReport())};` +
-    `window.__MOCK_LAST_RACE = ${JSON.stringify(mockStoredRace())};</script>` +
+    `window.__MOCK_LAST_RACE = ${JSON.stringify(mockStoredRace())};` +
+    `window.__MOCK_RESULTS_INDEX = ${JSON.stringify(mockResultsIndex())};</script>` +
     `<script src="/test/mock/chrome-shim.js"></script>`;
   return html.replace('</head>', shim + '</head>');
 }

@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.13.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.14.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -152,6 +152,26 @@ is visible rather than misleading.
 
 **Export view (CSV)** follows the toggle: team aggregates in team view, riders
 in rider view.
+
+### Choosing a race
+
+The report is not limited to your own teams, and it does not follow your
+membership — it shows whichever race you pick. Originally that meant driving
+WTRL's own dropdowns and pressing **Power** again; now the report page has its
+own **competition / league / division / race** pickers, built from WTRL's index,
+so any division in the season is one **Load** away. They default to the race
+currently on screen.
+
+### Race formats
+
+Not every ZRL race awards rider points. A **TTT** is scored on team time, so FAL,
+FTS and FIN simply do not exist for it — WTRL returns zero for every rider. The
+report reads the race's format from WTRL's index and, for a format with no rider
+points, hides those columns and says why rather than showing a wall of zeros.
+The race's real name is shown too, so you can tell at a glance which format you
+are looking at:
+
+> Cherry A1 · Race 3: Watopia Figure 8 Reverse TTT (Finalized) · Zwift event 5735846
 
 ### League table
 
