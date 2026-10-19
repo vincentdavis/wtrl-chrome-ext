@@ -9,8 +9,37 @@ const state = {
   showWatts: false,
   sortKey: 'position',
   sortDir: 1,
-  careerCache: new Map()
+  careerCache: new Map(),
+  view: 'rider',          // 'rider' | 'team'
+  teamSort: 'position',
+  teamSortDir: 1,
+  expanded: new Set()
 };
+
+/**
+ * Team view: WTRL's own scoring beside ZwiftPower averages for the same team.
+ *
+ * Averages cover only the riders who matched a ZwiftPower row — the Power
+ * column says how many that was, so a thin average is visible rather than
+ * silently flattering or penalising a team.
+ */
+const TEAM_COLUMNS = [
+  { key: 'position', label: '#', type: 'number', align: 'right' },
+  { key: 'teamName', label: 'Team', type: 'text' },
+  { key: 'riderCount', label: 'Riders', type: 'number', align: 'right' },
+  { key: 'matchedCount', label: 'Power', type: 'number', align: 'right' },
+  { key: 'points.total', label: 'Points', type: 'number', align: 'right' },
+  { key: 'avg.avgWkg', label: 'Avg w/kg', type: 'number', align: 'right' },
+  { key: 'avg.wkg20m', label: 'Avg 20m', type: 'number', align: 'right' },
+  { key: 'avg.wkg5m', label: 'Avg 5m', type: 'number', align: 'right' },
+  { key: 'avg.wkg1m', label: 'Avg 1m', type: 'number', align: 'right' },
+  { key: 'avg.wkg15s', label: 'Avg 15s', type: 'number', align: 'right' },
+  { key: 'best.wkg20m', label: 'Best 20m', type: 'number', align: 'right' },
+  { key: 'avg.ftpW', label: 'Avg FTP', type: 'number', align: 'right' },
+  { key: 'avg.weightKg', label: 'Avg kg', type: 'number', align: 'right' }
+];
+
+const dig = (obj, path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
 
 const BASE_COLUMNS = [
   { key: 'position', label: '#', type: 'number', align: 'right' },
@@ -130,6 +159,7 @@ function renderTiles() {
 // =================================================================== table ===
 
 function renderHead() {
+  if (state.view === 'team') return renderTeamHead();
   const row = $('head');
   row.innerHTML = '';
   columns().forEach((column) => {
@@ -196,6 +226,7 @@ function levelFor(rows, column, value) {
 }
 
 function render() {
+  if (state.view === 'team') return renderTeams();
   const rows = (state.report.riders || []).filter(matches);
   const sorted = sortRows(rows);
   const cols = columns();
@@ -262,6 +293,170 @@ function render() {
   });
 }
 
+function renderTeamHead() {
+  const row = $('head');
+  row.innerHTML = '';
+  TEAM_COLUMNS.forEach((column) => {
+    const th = document.createElement('th');
+    th.className = 'sortable' + (column.align ? ' align-' + column.align : '');
+    th.textContent =
+      column.label + (state.teamSort === column.key ? (state.teamSortDir === 1 ? ' ▲' : ' ▼') : '');
+    if (state.teamSort === column.key) th.classList.add('sorted');
+    th.addEventListener('click', () => {
+      if (state.teamSort === column.key) state.teamSortDir *= -1;
+      else {
+        state.teamSort = column.key;
+        state.teamSortDir = column.type === 'number' ? -1 : 1;
+      }
+      renderTeamHead();
+      renderTeams();
+    });
+    row.appendChild(th);
+  });
+}
+
+/** Teams whose name or any rider matches the active search. */
+function teamMatches(team) {
+  const f = state.filters;
+  if (f.cat && !Object.keys(team.categories || {}).includes(f.cat)) return false;
+  if (f.team && team.teamName !== f.team) return false;
+  if (f.search) {
+    const needle = f.search.toLowerCase();
+    const inName = String(team.teamName || '').toLowerCase().includes(needle);
+    const inRiders = (team.riders || []).some((r) =>
+      [displayName(r), r.zwid].some((v) => String(v ?? '').toLowerCase().includes(needle))
+    );
+    if (!inName && !inRiders) return false;
+  }
+  return true;
+}
+
+function renderTeams() {
+  const teams = (state.report.teams || []).filter(teamMatches);
+  const body = $('body');
+  body.innerHTML = '';
+
+  const total = (state.report.teams || []).length;
+  $('count').textContent =
+    teams.length === total ? `${total} teams` : `${teams.length} of ${total} teams`;
+
+  if (!teams.length) {
+    body.innerHTML =
+      `<tr><td class="empty-row" colspan="${TEAM_COLUMNS.length}">Nothing matches these filters.</td></tr>`;
+    return;
+  }
+
+  const sorted = teams.slice().sort((a, b) => {
+    const av = dig(a, state.teamSort);
+    const bv = dig(b, state.teamSort);
+    const column = TEAM_COLUMNS.find((c) => c.key === state.teamSort);
+    if (column && column.type === 'number') {
+      const an = typeof av === 'number' ? av : null;
+      const bn = typeof bv === 'number' ? bv : null;
+      if (an === null && bn === null) return 0;
+      if (an === null) return 1;
+      if (bn === null) return -1;
+      return (an - bn) * state.teamSortDir;
+    }
+    return String(av ?? '').localeCompare(String(bv ?? ''), undefined, { sensitivity: 'base' }) *
+      state.teamSortDir;
+  });
+
+  sorted.forEach((team) => {
+    const open = state.expanded.has(team.teamName);
+    const tr = document.createElement('tr');
+    tr.className = 'team-summary';
+
+    TEAM_COLUMNS.forEach((column) => {
+      const td = document.createElement('td');
+      if (column.align) td.className = 'align-' + column.align;
+      const value = dig(team, column.key);
+
+      if (column.key === 'teamName') {
+        td.innerHTML =
+          `<span class="team-toggle">${open ? '▾' : '▸'}</span>` +
+          `<span>${escapeHtml(value || '—')}</span> ` +
+          `<span class="cat-mix">${escapeHtml(
+            Object.entries(team.categories || {})
+              .sort()
+              .map(([c, n]) => `${n}${c}`)
+              .join(' ')
+          )}</span>`;
+      } else if (column.key === 'matchedCount') {
+        const partial = team.matchedCount < team.riderCount;
+        td.innerHTML =
+          `<span class="coverage${partial ? ' partial' : ''}">${team.matchedCount}/${team.riderCount}</span>`;
+        if (partial) {
+          td.title = `${team.riderCount - team.matchedCount} rider(s) have no ZwiftPower data; averages exclude them`;
+        }
+      } else {
+        td.textContent =
+          typeof value === 'number'
+            ? (column.key.includes('wkg') || column.key.includes('Wkg')
+                ? value.toFixed(2)
+                : Math.round(value * 10) / 10)
+            : value === null || value === undefined || value === ''
+              ? '—'
+              : value;
+      }
+      tr.appendChild(td);
+    });
+
+    // The whole row toggles, not just the name — a wider target to hit.
+    tr.addEventListener('click', () => {
+      if (state.expanded.has(team.teamName)) state.expanded.delete(team.teamName);
+      else state.expanded.add(team.teamName);
+      renderTeams();
+    });
+
+    body.appendChild(tr);
+
+    if (!open) return;
+
+    // Expanded riders, reusing the rider columns so the two views agree.
+    (team.riders || [])
+      .slice()
+      .sort((a, b) => (a.position ?? 9999) - (b.position ?? 9999))
+      .forEach((rider) => {
+        const rtr = document.createElement('tr');
+        rtr.className = 'team-rider' + (rider.matched ? ' clickable' : ' unmatched');
+        if (rider.matched) rtr.addEventListener('click', () => showCareer(rider));
+
+        const cells = [
+          rider.position ?? rider.zrlPosition ?? '',
+          displayName(rider),
+          rider.category ?? '',
+          rider.matched ? '✓' : '—',
+          '',
+          rider.avgWkg,
+          curveAt(rider, 1200)?.wkg,
+          curveAt(rider, 300)?.wkg,
+          curveAt(rider, 60)?.wkg,
+          curveAt(rider, 15)?.wkg,
+          '',
+          rider.raceFtpW,
+          rider.weightKg
+        ];
+
+        cells.forEach((value, i) => {
+          const td = document.createElement('td');
+          const column = TEAM_COLUMNS[i];
+          if (column.align) td.className = 'align-' + column.align;
+          td.textContent =
+            typeof value === 'number'
+              ? (column.key.includes('wkg') || column.key.includes('Wkg')
+                  ? value.toFixed(1)
+                  : Math.round(value * 10) / 10)
+              : value === null || value === undefined || value === ''
+                ? ''
+                : value;
+          rtr.appendChild(td);
+        });
+        body.appendChild(rtr);
+      });
+  });
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
@@ -312,6 +507,22 @@ async function showCareer(rider) {
 
 $('careerClose').addEventListener('click', () => { $('career').hidden = true; });
 
+function setView(view) {
+  state.view = view;
+  $('viewTeam').classList.toggle('active', view === 'team');
+  $('viewRider').classList.toggle('active', view === 'rider');
+  // Rider-only controls make no sense against team rows.
+  ['matchedOnly', 'showWatts'].forEach((id) => {
+    const label = $(id).closest('label');
+    if (label) label.hidden = view === 'team';
+  });
+  renderHead();
+  render();
+}
+
+$('viewTeam').addEventListener('click', () => setView('team'));
+$('viewRider').addEventListener('click', () => setView('rider'));
+
 // ================================================================ controls ===
 
 $('search').addEventListener('input', (e) => { state.filters.search = e.target.value.trim(); render(); });
@@ -332,14 +543,27 @@ $('reset').addEventListener('click', () => {
 
 $('exportCsv').addEventListener('click', () => {
   if (!state.report) return;
-  const filtered = Object.assign({}, state.report, {
-    riders: sortRows((state.report.riders || []).filter(matches))
-  });
+  const zid = (state.report.race || {}).zid || 'race';
+
+  // Export what is on screen: team aggregates in team view, riders otherwise.
+  const rows =
+    state.view === 'team'
+      ? WTRLRace.teamsToCsvRows(
+          Object.assign({}, state.report, {
+            teams: (state.report.teams || []).filter(teamMatches)
+          })
+        )
+      : WTRLRace.raceToCsvRows(
+          Object.assign({}, state.report, {
+            riders: sortRows((state.report.riders || []).filter(matches))
+          })
+        );
+
   chrome.runtime.sendMessage({
     type: 'download',
-    filename: `wtrl-race-power-${(state.report.race || {}).zid || 'race'}.csv`,
+    filename: `wtrl-race-${state.view === 'team' ? 'teams' : 'power'}-${zid}.csv`,
     mime: 'text/csv',
-    body: WTRLFormat.toCsv({ riders: WTRLRace.raceToCsvRows(filtered) })
+    body: WTRLFormat.toCsv({ riders: rows })
   });
 });
 

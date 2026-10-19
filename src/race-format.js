@@ -107,7 +107,11 @@
           name: rider.name,
           zrlTeam: team.teamname || null,
           zrlPosition: rider.p1 ?? null,
-          category: rider.category ?? null,
+          // WTRL sends this numerically (10, 20, …) on the same scale as
+          // ZwiftPower's div. Converting here keeps `category` a letter for
+          // every rider, so unmatched riders don't skew a team's category mix.
+          category: categoryFromDiv(rider.category) ?? rider.category ?? null,
+          categoryCode: rider.category ?? null,
           wtrlWatts: rider.watts ?? null,
           wtrlWkg: rider.wkg ?? null,
           finished: rider.finished,
@@ -120,6 +124,127 @@
       });
     });
     return out;
+  }
+
+  /**
+   * ZwiftPower division codes -> category letters.
+   *
+   * Inferred from the club-wide distribution (0/5/10/20/30/40) and confirmed
+   * against WTRL: every rider WTRL calls "B" sits at div 20. The team page
+   * renders client-side from this same JSON, so there is no server-rendered
+   * letter to check it against.
+   */
+  const DIVISIONS = { 5: 'A+', 10: 'A', 20: 'B', 30: 'C', 40: 'D', 50: 'E' };
+
+  function categoryFromDiv(div) {
+    const n = Number(div);
+    if (!Number.isFinite(n) || n === 0) return null; // 0 means unranked
+    return DIVISIONS[n] || null;
+  }
+
+  /** Team-level rows from the WTRL results payload, with its own scoring. */
+  function wtrlTeams(payload) {
+    return ((payload && payload.payload) || []).map((team) => ({
+      teamName: team.teamname || null,
+      position: team.p1 ?? null,
+      division: team.zrldivision || null,
+      riderCount: (team.a || []).length,
+      points: {
+        fal: team.falp ?? null,
+        fts: team.ftsp ?? null,
+        fin: team.finp ?? null,
+        pbp: team.pbp ?? null,
+        total: team.totp ?? null
+      },
+      timeResult: team.timeResult ?? null,
+      gap: team.gap ?? null,
+      wtrlWatts: team.watts ?? null,
+      wtrlWkg: team.wkg ?? null,
+      speed: team.speed ?? null
+    }));
+  }
+
+  const mean = (values) => {
+    const nums = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
+    if (!nums.length) return null;
+    return Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 100) / 100;
+  };
+
+  const median = (values) => {
+    const nums = values
+      .filter((v) => typeof v === 'number' && Number.isFinite(v))
+      .sort((a, b) => a - b);
+    if (!nums.length) return null;
+    const mid = Math.floor(nums.length / 2);
+    const m = nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+    return Math.round(m * 100) / 100;
+  };
+
+  const maxOf = (values) => {
+    const nums = values.filter((v) => typeof v === 'number' && Number.isFinite(v));
+    return nums.length ? Math.max(...nums) : null;
+  };
+
+  const curveValue = (rider, seconds) => {
+    const point = (rider.powerCurve || []).find((p) => p.seconds === seconds);
+    return point ? point.wkg : null;
+  };
+
+  /**
+   * Per-team ZwiftPower aggregates, alongside WTRL's own team scoring.
+   *
+   * Averages cover only riders who matched a ZwiftPower row, so a team with
+   * missing riders is not quietly dragged down by counting them as zero;
+   * `matchedCount` says how many riders each average is actually based on.
+   */
+  function teamAggregates(riders, wtrlTeamRows) {
+    const byTeam = new Map();
+    (wtrlTeamRows || []).forEach((team) => byTeam.set(team.teamName, { meta: team, riders: [] }));
+
+    riders.forEach((rider) => {
+      const key = rider.zrlTeam;
+      if (!byTeam.has(key)) {
+        byTeam.set(key, { meta: { teamName: key, riderCount: 0 }, riders: [] });
+      }
+      byTeam.get(key).riders.push(rider);
+    });
+
+    return Array.from(byTeam.values()).map(({ meta, riders: teamRiders }) => {
+      const withPower = teamRiders.filter((r) => r.matched);
+      const pick = (fn) => withPower.map(fn);
+
+      const categories = {};
+      teamRiders.forEach((r) => {
+        const cat = r.category || r.zpCategory || '?';
+        categories[cat] = (categories[cat] || 0) + 1;
+      });
+
+      return Object.assign({}, meta, {
+        riderCount: teamRiders.length,
+        matchedCount: withPower.length,
+        categories,
+        avg: {
+          wkg15s: mean(pick((r) => curveValue(r, 15))),
+          wkg1m: mean(pick((r) => curveValue(r, 60))),
+          wkg5m: mean(pick((r) => curveValue(r, 300))),
+          wkg20m: mean(pick((r) => curveValue(r, 1200))),
+          avgWkg: mean(pick((r) => r.avgWkg)),
+          np: mean(pick((r) => r.normalisedPowerW)),
+          ftpW: mean(pick((r) => r.raceFtpW)),
+          weightKg: mean(pick((r) => r.weightKg))
+        },
+        median: {
+          wkg20m: median(pick((r) => curveValue(r, 1200))),
+          wkg5m: median(pick((r) => curveValue(r, 300)))
+        },
+        best: {
+          wkg20m: maxOf(pick((r) => curveValue(r, 1200))),
+          wkg5m: maxOf(pick((r) => curveValue(r, 300))),
+          wkg15s: maxOf(pick((r) => curveValue(r, 15)))
+        },
+        riders: teamRiders
+      });
+    });
   }
 
   /** The Zwift event id shared by every rider row, if they agree on one. */
@@ -153,7 +278,7 @@
       zpTeamId: row.tid || null,
       position: row.pos ?? null,
       positionInCategory: row.position_in_cat ?? null,
-      category: row.category || null,
+      zpRaceCategory: row.category || null,
       division: row.div ?? null,
       time: zpNum(row.time),
       gap: zpNum(row.gap),
@@ -249,6 +374,7 @@
       matchedCount: joined.riders.filter((r) => r.matched).length,
       unmatched: joined.unmatched,
       fieldSize: joined.zpRowCount,
+      teams: teamAggregates(joined.riders, wtrlTeams(opts.wtrlPayload || {})),
       riders: joined.riders
     };
   }
@@ -267,6 +393,34 @@
       });
       return { seconds: d.key, label: d.label, wkg: bestWkg, watts: bestW };
     });
+  }
+
+  /** Flat rows for CSV: one per team, WTRL scoring plus ZwiftPower averages. */
+  function teamsToCsvRows(report) {
+    return (report.teams || []).map((t) => ({
+      position: t.position ?? '',
+      team: t.teamName,
+      riders: t.riderCount,
+      ridersWithPower: t.matchedCount,
+      categories: Object.entries(t.categories || {})
+        .sort()
+        .map(([c, n]) => `${n}${c}`)
+        .join(' '),
+      pointsTotal: t.points ? (t.points.total ?? '') : '',
+      pointsFal: t.points ? (t.points.fal ?? '') : '',
+      pointsFts: t.points ? (t.points.fts ?? '') : '',
+      pointsFin: t.points ? (t.points.fin ?? '') : '',
+      pointsPbp: t.points ? (t.points.pbp ?? '') : '',
+      avgWkg: t.avg.avgWkg ?? '',
+      avgWkg20m: t.avg.wkg20m ?? '',
+      avgWkg5m: t.avg.wkg5m ?? '',
+      avgWkg1m: t.avg.wkg1m ?? '',
+      avgWkg15s: t.avg.wkg15s ?? '',
+      medianWkg20m: t.median.wkg20m ?? '',
+      bestWkg20m: t.best.wkg20m ?? '',
+      avgFtpW: t.avg.ftpW ?? '',
+      avgWeightKg: t.avg.weightKg ?? ''
+    }));
   }
 
   /** Flat rows for CSV: one per rider, power curve spread across columns. */
@@ -291,22 +445,6 @@
       });
       return row;
     });
-  }
-
-  /**
-   * ZwiftPower division codes -> category letters.
-   *
-   * Inferred from the club-wide distribution (0/5/10/20/30/40) and confirmed
-   * against WTRL: every rider WTRL calls "B" sits at div 20. The team page
-   * renders client-side from this same JSON, so there is no server-rendered
-   * letter to check it against.
-   */
-  const DIVISIONS = { 5: 'A+', 10: 'A', 20: 'B', 30: 'C', 40: 'D', 50: 'E' };
-
-  function categoryFromDiv(div) {
-    const n = Number(div);
-    if (!Number.isFinite(n) || n === 0) return null; // 0 means unranked
-    return DIVISIONS[n] || null;
   }
 
   /**
@@ -408,6 +546,8 @@
   }
 
   root.WTRLRace = {
+    wtrlTeams,
+    teamAggregates,
     DIVISIONS,
     categoryFromDiv,
     mapRosterRider,
@@ -426,6 +566,7 @@
     joinRiders,
     buildRaceReport,
     careerBests,
-    raceToCsvRows
+    raceToCsvRows,
+    teamsToCsvRows
   };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

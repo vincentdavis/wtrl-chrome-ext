@@ -360,3 +360,121 @@ test('stripStats keeps the zwiftpower block while trimming rider fields', () => 
   assert.equal(stripped.riders[0].zpFtpW, undefined, 'per-rider extras are trimmed');
   assert.equal(stripped.riders[0].zwid, 38810, 'the join key is still there');
 });
+
+// ------------------------------------------------------------ team view ---
+
+test('wtrlTeams keeps WTRL team scoring alongside the riders', () => {
+  const teams = R.wtrlTeams(wtrlPayload);
+  assert.equal(teams.length, 2);
+  assert.equal(teams[0].teamName, 'Windriders');
+  assert.equal(teams[0].riderCount, 3);
+  assert.equal(teams[0].division, 'A');
+});
+
+test('buildRaceReport aggregates ZwiftPower power per team', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+
+  assert.equal(report.teams.length, 2);
+  const wind = report.teams.find((t) => t.teamName === 'Windriders');
+
+  assert.equal(wind.riderCount, 3);
+  assert.equal(wind.matchedCount, 3);
+  // Stefan 4.6, Martin 4.3, Łukasz 4.1
+  assert.equal(wind.avg.wkg20m, 4.33);
+  assert.equal(wind.median.wkg20m, 4.3);
+  assert.equal(wind.best.wkg20m, 4.6);
+  assert.equal(wind.avg.weightKg, 71.5);
+});
+
+test('team averages exclude riders with no ZwiftPower row', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  const vegan = report.teams.find((t) => t.teamName === 'Vegan Albatrosses');
+
+  // Three riders, but B. Howell has no ZwiftPower data.
+  assert.equal(vegan.riderCount, 3);
+  assert.equal(vegan.matchedCount, 2);
+
+  // Sam 4.0 and Rui 3.9 -> 3.95. Counting Howell as zero would give 2.63.
+  assert.equal(vegan.avg.wkg20m, 3.95);
+  assert.ok(vegan.avg.wkg20m > 3.9, 'a missing rider must not drag the average down');
+});
+
+test('every team in the race is aggregated, not just ours', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  assert.equal(
+    report.teams.map((t) => t.teamName).sort().join('|'),
+    'Vegan Albatrosses|Windriders'
+  );
+  report.teams.forEach((t) => {
+    assert.ok(Array.isArray(t.riders), 'each team carries its riders for expansion');
+    assert.ok(t.riders.length > 0);
+  });
+});
+
+test('a team with no ZwiftPower data at all yields nulls, not zeros', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows: [], ...buildOpts });
+  const wind = report.teams.find((t) => t.teamName === 'Windriders');
+  assert.equal(wind.matchedCount, 0);
+  assert.equal(wind.avg.wkg20m, null, 'no data is null, never 0.00');
+  assert.equal(wind.best.wkg20m, null);
+  assert.equal(wind.median.wkg20m, null);
+});
+
+test('category mix is counted per team', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  const wind = report.teams.find((t) => t.teamName === 'Windriders');
+  assert.equal(Object.values(wind.categories).reduce((a, b) => a + b, 0), 3);
+});
+
+test('WTRL numeric categories become letters, matched or not', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+
+  // WTRL sends 10; ZwiftPower sends "A". Both must read as "A", otherwise an
+  // unmatched rider shows up as its own category in the team mix.
+  report.riders.forEach((r) => {
+    assert.equal(r.category, 'A', `${r.name} should be category A`);
+  });
+
+  const howell = report.riders.find((r) => r.name === 'B. Howell');
+  assert.equal(howell.matched, false);
+  assert.equal(howell.category, 'A', 'an unmatched rider still gets a letter');
+  assert.equal(howell.categoryCode, 10, 'the raw WTRL code is kept');
+
+  report.teams.forEach((team) => {
+    assert.deepEqual(Object.keys(team.categories), ['A']);
+  });
+});
+
+test('ZwiftPower race category is kept separately from WTRL category', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  const stefan = report.riders.find((r) => r.name === 'S. Joneström');
+  assert.equal(stefan.category, 'A', "WTRL's");
+  assert.equal(stefan.zpRaceCategory, 'A', "ZwiftPower's, held separately");
+});
+
+test('team rows carry WTRL scoring beside the power averages', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  const wind = report.teams.find((t) => t.teamName === 'Windriders');
+  assert.equal(wind.position, 1);
+  assert.equal(wind.points.total, 828);
+  assert.equal(wind.points.fal, 546);
+  assert.equal(wind.avg.wkg20m, 4.33, 'ZwiftPower average sits beside WTRL points');
+});
+
+test('teamsToCsvRows flattens the team view for export', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  const rows = R.teamsToCsvRows(report);
+
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].team, 'Windriders');
+  assert.equal(rows[0].position, 1);
+  assert.equal(rows[0].pointsTotal, 828);
+  assert.equal(rows[0].ridersWithPower, 3);
+  assert.equal(rows[0].avgWkg20m, 4.33);
+  assert.equal(rows[0].categories, '3A');
+
+  // A team with partial coverage exports blanks, not zeros.
+  const noPower = R.teamsToCsvRows(R.buildRaceReport({ wtrlPayload, zpRows: [], ...buildOpts }));
+  assert.equal(noPower[0].avgWkg20m, '');
+  assert.equal(noPower[0].ridersWithPower, 0);
+});

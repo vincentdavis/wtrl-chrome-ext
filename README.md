@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.7.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.8.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -135,7 +135,27 @@ first initial *within that one event*, which is a small enough pool to be
 reliable. On a real race this matched 18 of 19 riders; the one miss simply has no
 ZwiftPower row for that event, and is reported rather than guessed at.
 
-The table shows, per rider:
+It covers **every rider in the race**, not just your own team — the whole
+division's field, each team side by side.
+
+### Team view
+
+A **Team / Rider** toggle mirrors WTRL's own. Team view puts WTRL's scoring
+(position, FAL/FTS/FIN/PBP, total) next to ZwiftPower averages for the same
+team: average w/kg at 20m, 5m, 1m and 15s, best 20-minute effort, average FTP
+and weight, and the category mix. Click any team to expand its riders inline.
+
+Averages count **only riders who matched a ZwiftPower row**, so a team is not
+quietly dragged down by counting a missing rider as zero. The **Power** column
+shows the coverage (`2/3`) and turns amber when it is partial, so a thin average
+is visible rather than misleading.
+
+**Export view (CSV)** follows the toggle: team aggregates in team view, riders
+in rider view.
+
+### Rider view
+
+Per rider:
 
 - **Power curve** at 5s, 15s, 30s, 1m, 2m, 5m and 20m, in w/kg or watts. Values
   are shaded against the field so a standout effort is visible down a column,
@@ -146,6 +166,10 @@ The table shows, per rider:
 - **Click any rider** for their career bests at every duration, fetched on
   demand, with this race's numbers alongside — so you can see at a glance
   whether someone just rode well above their own history.
+
+WTRL sends rider categories numerically (`10`, `20`) on the same scale as
+ZwiftPower's divisions; both are shown as letters so a team's category mix reads
+consistently whether or not a rider matched.
 
 Riders with no ZwiftPower row are listed in a banner and kept in the table
 (greyed out) rather than dropped, so the field is never quietly incomplete.

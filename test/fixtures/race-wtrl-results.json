@@ -1,24 +1,134 @@
 {
   "success": true,
-  "args": { "season": "20", "class": "2120A10", "race": "3" },
+  "args": {
+    "season": "20",
+    "class": "2120A10",
+    "race": "3"
+  },
   "payload": [
     {
       "teamname": "Windriders",
       "zrldivision": "A",
       "a": [
-        { "p1": 1, "name": "S. Joneström", "category": 10, "watts": 283, "wkg": 4.2, "finished": 1, "timeResult": "0:58:12", "gap": "", "zid": 5735846, "activity": 2247802065466212400, "zpower": 1, "zwid": 0, "dq": "" },
-        { "p1": 2, "name": "M. Nohammar", "category": 10, "watts": 301, "wkg": 4.1, "finished": 1, "timeResult": "0:58:14", "gap": "+2", "zid": 5735846, "activity": 2247802065466212401, "zpower": 1, "zwid": 0, "dq": "" },
-        { "p1": 3, "name": "Ł. Fiałkowski", "category": 10, "watts": 295, "wkg": 4.0, "finished": 1, "timeResult": "0:58:20", "gap": "+8", "zid": 5735846, "activity": 2247802065466212402, "zpower": 1, "zwid": 0, "dq": "" }
-      ]
+        {
+          "p1": 1,
+          "name": "S. Jonestr\u00f6m",
+          "category": 10,
+          "watts": 283,
+          "wkg": 4.2,
+          "finished": 1,
+          "timeResult": "0:58:12",
+          "gap": "",
+          "zid": 5735846,
+          "activity": 2247802065466212400,
+          "zpower": 1,
+          "zwid": 0,
+          "dq": ""
+        },
+        {
+          "p1": 2,
+          "name": "M. Nohammar",
+          "category": 10,
+          "watts": 301,
+          "wkg": 4.1,
+          "finished": 1,
+          "timeResult": "0:58:14",
+          "gap": "+2",
+          "zid": 5735846,
+          "activity": 2247802065466212401,
+          "zpower": 1,
+          "zwid": 0,
+          "dq": ""
+        },
+        {
+          "p1": 3,
+          "name": "\u0141. Fia\u0142kowski",
+          "category": 10,
+          "watts": 295,
+          "wkg": 4.0,
+          "finished": 1,
+          "timeResult": "0:58:20",
+          "gap": "+8",
+          "zid": 5735846,
+          "activity": 2247802065466212402,
+          "zpower": 1,
+          "zwid": 0,
+          "dq": ""
+        }
+      ],
+      "p1": 1,
+      "falp": 546,
+      "ftsp": 134,
+      "finp": 120,
+      "pbp": 28,
+      "totp": 828,
+      "timeResult": "0:58:42",
+      "gap": "",
+      "watts": 295,
+      "wkg": 4.1,
+      "speed": 42.3
     },
     {
       "teamname": "Vegan Albatrosses",
       "zrldivision": "A",
       "a": [
-        { "p1": 4, "name": "S. Mobberley", "category": 10, "watts": 288, "wkg": 3.9, "finished": 1, "timeResult": "0:58:31", "gap": "+19", "zid": 5735846, "activity": 2247802065466212403, "zpower": 1, "zwid": 0, "dq": "" },
-        { "p1": 5, "name": "R. Catalão", "category": 10, "watts": 274, "wkg": 3.8, "finished": 1, "timeResult": "0:58:40", "gap": "+28", "zid": 5735846, "activity": 2247802065466212404, "zpower": 1, "zwid": 0, "dq": "" },
-        { "p1": 6, "name": "B. Howell", "category": 10, "watts": 268, "wkg": 3.7, "finished": 1, "timeResult": "0:59:02", "gap": "+50", "zid": 5735846, "activity": 2247802065466212405, "zpower": 1, "zwid": 0, "dq": "" }
-      ]
+        {
+          "p1": 4,
+          "name": "S. Mobberley",
+          "category": 10,
+          "watts": 288,
+          "wkg": 3.9,
+          "finished": 1,
+          "timeResult": "0:58:31",
+          "gap": "+19",
+          "zid": 5735846,
+          "activity": 2247802065466212403,
+          "zpower": 1,
+          "zwid": 0,
+          "dq": ""
+        },
+        {
+          "p1": 5,
+          "name": "R. Catal\u00e3o",
+          "category": 10,
+          "watts": 274,
+          "wkg": 3.8,
+          "finished": 1,
+          "timeResult": "0:58:40",
+          "gap": "+28",
+          "zid": 5735846,
+          "activity": 2247802065466212404,
+          "zpower": 1,
+          "zwid": 0,
+          "dq": ""
+        },
+        {
+          "p1": 6,
+          "name": "B. Howell",
+          "category": 10,
+          "watts": 268,
+          "wkg": 3.7,
+          "finished": 1,
+          "timeResult": "0:59:02",
+          "gap": "+50",
+          "zid": 5735846,
+          "activity": 2247802065466212405,
+          "zpower": 1,
+          "zwid": 0,
+          "dq": ""
+        }
+      ],
+      "p1": 2,
+      "falp": 275,
+      "ftsp": 24,
+      "finp": 42,
+      "pbp": 0,
+      "totp": 341,
+      "timeResult": "0:59:15",
+      "gap": "+33",
+      "watts": 277,
+      "wkg": 3.8,
+      "speed": 41.6
     }
   ]
 }

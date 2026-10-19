@@ -61,3 +61,75 @@ tbody tr.clickable { cursor: pointer; }
 .career-cell .v { font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .career-cell .w { font-size: 11px; color: var(--muted); }
 .career-cell.race-value { border-color: rgba(230, 57, 70, 0.45); }
+
+/* ------------------------------------------------------------- view tabs --- */
+
+.viewtabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 3px;
+  align-self: flex-start;
+}
+
+.viewtab {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.viewtab:hover { color: var(--text); background: transparent; }
+
+.viewtab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ------------------------------------------------------------ team rows --- */
+
+tr.team-summary td {
+  background: #10131a;
+  border-top: 1px solid var(--line);
+  font-weight: 600;
+}
+
+tr.team-summary:hover td { background: #161a22; }
+tr.team-summary td:first-child { cursor: pointer; }
+
+.team-toggle {
+  display: inline-block;
+  width: 14px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+tr.team-rider td {
+  padding-left: 22px;
+  font-weight: 400;
+}
+
+tr.team-rider td:first-child {
+  box-shadow: inset 3px 0 0 var(--line);
+}
+
+.cat-mix {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.coverage {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.coverage.partial { color: var(--warn); }
