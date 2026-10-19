@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.9.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.10.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -161,8 +161,8 @@ comparable numbers, so one scale across both would be meaningless. The
 
 | Palette | Colour-blind safe |
 | --- | --- |
-| Red → green (default) | **No** — this is the pairing deuteranopia and protanopia cannot separate |
-| Viridis | Yes, perceptually even |
+| Viridis (default) | Yes, perceptually even |
+| Red → green | **No** — this is the pairing deuteranopia and protanopia cannot separate |
 | Cividis | Yes, designed for colour-blind viewers |
 | Blue → orange | Yes, diverging |
 | Monochrome | Yes, lightness only |

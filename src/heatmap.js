@@ -31,7 +31,7 @@
     },
     viridis: {
       label: 'Viridis',
-      note: 'Colour-blind safe, perceptually even',
+      note: 'Colour-blind safe, perceptually even (default)',
       safe: true,
       stops: [
         [0.0, [68, 1, 84]],
@@ -79,7 +79,10 @@
     }
   };
 
-  const DEFAULT_PALETTE = 'redgreen';
+  // Viridis by default: red-to-green is the familiar look but is unreadable
+  // for red-green colour blindness, so the safe palette is the one people get
+  // without having to know to go and change it.
+  const DEFAULT_PALETTE = 'viridis';
 
   function paletteNames() {
     return Object.keys(PALETTES);

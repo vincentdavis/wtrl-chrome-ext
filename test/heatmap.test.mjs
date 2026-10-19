@@ -134,3 +134,10 @@ test('cellStyle returns nothing for a value with no rank', () => {
   assert.equal(H.cellStyle(null, 'viridis'), null);
   assert.equal(H.cellStyle(undefined, 'viridis'), null);
 });
+
+test('the default palette is colour-blind safe', () => {
+  // Whatever the default becomes, it must not be one that a red-green
+  // colour-blind viewer cannot read.
+  assert.equal(H.DEFAULT_PALETTE, 'viridis');
+  assert.equal(H.paletteInfo(H.DEFAULT_PALETTE).safe, true);
+});
