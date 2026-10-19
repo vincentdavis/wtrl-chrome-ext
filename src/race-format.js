@@ -293,7 +293,126 @@
     });
   }
 
+  /**
+   * ZwiftPower division codes -> category letters.
+   *
+   * Inferred from the club-wide distribution (0/5/10/20/30/40) and confirmed
+   * against WTRL: every rider WTRL calls "B" sits at div 20. The team page
+   * renders client-side from this same JSON, so there is no server-rendered
+   * letter to check it against.
+   */
+  const DIVISIONS = { 5: 'A+', 10: 'A', 20: 'B', 30: 'C', 40: 'D', 50: 'E' };
+
+  function categoryFromDiv(div) {
+    const n = Number(div);
+    if (!Number.isFinite(n) || n === 0) return null; // 0 means unranked
+    return DIVISIONS[n] || null;
+  }
+
+  /**
+   * One row of /cache3/teams/<id>_riders.json, reshaped.
+   *
+   * `email` is deliberately not carried through. The payload has the field for
+   * every club member, and none of this needs it.
+   */
+  function mapRosterRider(row) {
+    return {
+      zwid: Number(row.zwid) || null,
+      zpName: displayName(row.name),
+      zpCategory: categoryFromDiv(row.div),
+      zpDiv: Number(row.div) || 0,
+      zpDivWomen: Number(row.divw) || 0,
+      zpFtpW: zpNum(row.ftp),
+      zpWeightKg: zpNum(row.w),
+      zpAge: row.age || null,
+      zpFlag: row.flag || null,
+      zpRank: zpNum(row.rank),
+      zpSkill: zpNum(row.skill),
+      zpSkillRace: zpNum(row.skill_race),
+      zpSkillSeg: zpNum(row.skill_seg),
+      zpSkillPower: zpNum(row.skill_power),
+      zpRegistered: Number(row.reg) === 1,
+      zpRole: row.status || null,
+      zp20minW: zpNum(row.h_1200_watts),
+      zp20minWkg: zpNum(row.h_1200_wkg),
+      zp15sW: zpNum(row.h_15_watts),
+      zp15sWkg: zpNum(row.h_15_wkg),
+      zpDistanceKm: zpNum(row.distance),
+      zpClimbedM: zpNum(row.climbed),
+      zpEnergyKj: zpNum(row.energy),
+      zpTimeHours: zpNum(row.time)
+    };
+  }
+
+  /** Strip the roster to what we are willing to store or ship onward. */
+  function sanitiseRoster(rows) {
+    return (rows || []).filter((r) => Number(r.zwid) > 0).map(mapRosterRider);
+  }
+
+  /**
+   * Fold a ZwiftPower club roster into a WTRL team report, matched on zwid —
+   * the same number on both sides, so no name matching is needed here.
+   *
+   * A club roster covers everyone who has ever joined, so most of it will not
+   * appear in the report; that is expected and not reported as a problem. A
+   * rider in the report with no roster row is, and is flagged.
+   */
+  function enrichWithZwiftPower(report, rosterRows, options) {
+    const opts = options || {};
+    const roster = sanitiseRoster(rosterRows);
+    const byZwid = new Map(roster.map((r) => [r.zwid, r]));
+
+    const missing = [];
+    const inReport = new Set();
+    const apply = (rider) => {
+      if (Number(rider.zwid)) inReport.add(Number(rider.zwid));
+      const match = byZwid.get(Number(rider.zwid));
+      if (!match) {
+        if (!missing.some((m) => m.zwid === rider.zwid)) {
+          missing.push({ zwid: rider.zwid, name: rider.name });
+        }
+        return Object.assign({}, rider, { zpMatched: false });
+      }
+      const merged = Object.assign({}, rider, match, { zpMatched: true });
+      // The report's own name and category win; ZwiftPower's are additional.
+      merged.name = rider.name;
+      merged.category = rider.category;
+      merged.categoryMismatch = !!(
+        rider.category && match.zpCategory && rider.category !== match.zpCategory
+      );
+      return merged;
+    };
+
+    const teams = (report.teams || []).map((team) =>
+      Object.assign({}, team, { riders: (team.riders || []).map(apply) })
+    );
+    const riders = (report.riders || []).map(apply);
+
+    return Object.assign({}, report, {
+      teams,
+      riders,
+      zwiftpower: {
+        teamId: opts.teamId ?? null,
+        teamName: opts.teamName ?? null,
+        fetchedAt: opts.fetchedAt || new Date().toISOString(),
+        rosterSize: roster.length,
+        matched: riders.filter((r) => r.zpMatched).length,
+        missing,
+        // The raw ZwiftPower rows for riders in this report, keyed by zwid, so
+        // a server can redo or check the join itself. Club members who are not
+        // in the report are left out: a club holds everyone who ever joined,
+        // and the rest is noise on every upload.
+        roster: roster.filter((r) => inReport.has(r.zwid))
+      }
+    });
+  }
+
   root.WTRLRace = {
+    DIVISIONS,
+    categoryFromDiv,
+    mapRosterRider,
+    sanitiseRoster,
+    enrichWithZwiftPower,
     DURATIONS,
     displayName,
     zpNum,

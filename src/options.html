@@ -82,6 +82,29 @@
       </fieldset>
 
       <fieldset>
+        <legend>ZwiftPower</legend>
+        <p class="note">
+          Used to add category, rank, score and power to your roster, and to pull
+          power profiles for a race. ZwiftPower only answers a signed-in session,
+          so keep yourself logged in at zwiftpower.com. Rider email addresses are
+          never read from the club roster.
+        </p>
+        <label class="field">
+          Club / team ID
+          <input type="number" id="zwiftPowerTeamId" min="1" step="1" placeholder="detected automatically" />
+          <span class="hint">
+            Leave blank to use the club on your own ZwiftPower account. Set it
+            only to pull a different club.
+          </span>
+        </label>
+        <div class="actions">
+          <button id="saveZwiftPower">Save</button>
+          <button id="detectTeam">Detect from my account</button>
+        </div>
+        <div class="note" id="zwiftPowerStatus" hidden></div>
+      </fieldset>
+
+      <fieldset>
         <legend>WTRL endpoint</legend>
         <p class="note">
           Learned automatically the first time you build a report — the extension

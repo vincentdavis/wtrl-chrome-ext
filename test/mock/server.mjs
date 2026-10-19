@@ -57,12 +57,20 @@ function mockStoredReport() {
     rider.riderpoints = appearances[i][1] * 7;
   });
 
-  const report = context.WTRLFormat.buildReport(
+  let report = context.WTRLFormat.buildReport(
     [
       { team: { name: 'COALITION ANNIHILATION', trc: 76720, season: 20 }, data: teamA },
       { team: { name: 'COALITION DELUSION', trc: 76637, season: 20 }, data: teamB }
     ],
     { extensionVersion: '0.1.0-mock', generatedAt: new Date().toISOString() }
+  );
+
+  // Pre-enrich so the ZwiftPower columns can be previewed.
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/race-format.js'), 'utf8'), context);
+  report = context.WTRLRace.enrichWithZwiftPower(
+    report,
+    read('test/fixtures/zp-team-roster.json').data,
+    { teamId: 11991, teamName: 'COALITION' }
   );
 
   return {

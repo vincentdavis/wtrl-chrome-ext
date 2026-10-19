@@ -186,3 +186,177 @@ test('the report carries clean display names', () => {
   const sam = report.riders.find((r) => r.name === 'S. Mobberley');
   assert.equal(sam.zpName, 'Sam Mobberley');
 });
+
+// ------------------------------------------------------- roster enrichment ---
+
+const rosterRows = fixture('zp-team-roster.json').data;
+
+test('categoryFromDiv decodes the ZwiftPower division scale', () => {
+  assert.equal(R.categoryFromDiv(5), 'A+');
+  assert.equal(R.categoryFromDiv(10), 'A');
+  assert.equal(R.categoryFromDiv(20), 'B');
+  assert.equal(R.categoryFromDiv(30), 'C');
+  assert.equal(R.categoryFromDiv(40), 'D');
+  assert.equal(R.categoryFromDiv(0), null, '0 means unranked, not a category');
+  assert.equal(R.categoryFromDiv(''), null);
+  assert.equal(R.categoryFromDiv(99), null);
+});
+
+test('mapRosterRider unwraps values and never carries email', () => {
+  const chad = R.mapRosterRider(rosterRows[0]);
+
+  assert.equal(chad.zwid, 38810);
+  assert.equal(chad.zpCategory, 'B');
+  assert.equal(chad.zpFtpW, 242, 'unwrapped from ["242", 0]');
+  assert.equal(chad.zpWeightKg, 76.2);
+  assert.equal(chad.zpRank, 240.83);
+  assert.equal(chad.zpSkill, 7062);
+  assert.equal(chad.zp20minW, 264);
+  assert.equal(chad.zp20minWkg, 3.5);
+  assert.equal(chad.zpRegistered, true);
+
+  assert.equal('email' in chad, false, 'email must never leave the bridge');
+  assert.equal(
+    Object.keys(chad).some((k) => /mail/i.test(k)),
+    false
+  );
+});
+
+test('missing roster readings stay null rather than becoming zero', () => {
+  const kyle = R.mapRosterRider(rosterRows[2]);
+  assert.equal(kyle.zp20minW, null, 'empty string must not render as 0 W');
+  assert.equal(kyle.zp20minWkg, null);
+  assert.equal(kyle.zpRank, null);
+  assert.equal(kyle.zpSkill, null);
+  assert.equal(kyle.zpRegistered, false);
+  // Values that are present still come through.
+  assert.equal(kyle.zpFtpW, 276);
+});
+
+test('sanitiseRoster drops rows without a Zwift id and strips email', () => {
+  const rows = rosterRows.concat([{ zwid: 0, name: 'Ghost', email: 'x@y.z' }]);
+  const clean = R.sanitiseRoster(rows);
+  assert.equal(clean.length, rosterRows.length);
+  assert.equal(
+    JSON.stringify(clean).toLowerCase().includes('email'),
+    false
+  );
+});
+
+test('enrichWithZwiftPower joins the roster onto a team report by zwid', () => {
+  const base = {
+    teamCount: 1,
+    riderCount: 3,
+    teams: [
+      {
+        teamName: 'COALITION ANNIHILATION',
+        trc: 76720,
+        riders: [
+          { name: 'Chad D. Peddicord', zwid: 38810, category: 'B' },
+          { name: 'Kyle Maloney', zwid: 6934646, category: 'C' },
+          { name: 'Nobody Known', zwid: 11111, category: 'B' }
+        ]
+      }
+    ],
+    riders: [
+      { teamName: 'COALITION ANNIHILATION', name: 'Chad D. Peddicord', zwid: 38810, category: 'B' },
+      { teamName: 'COALITION ANNIHILATION', name: 'Kyle Maloney', zwid: 6934646, category: 'C' },
+      { teamName: 'COALITION ANNIHILATION', name: 'Nobody Known', zwid: 11111, category: 'B' }
+    ]
+  };
+
+  const out = R.enrichWithZwiftPower(base, rosterRows, {
+    teamId: 11991,
+    teamName: 'COALITION',
+    fetchedAt: '2026-10-19T09:00:00.000Z'
+  });
+
+  assert.equal(out.zwiftpower.teamId, 11991);
+  assert.equal(out.zwiftpower.rosterSize, 5);
+  assert.equal(out.zwiftpower.matched, 2);
+  assert.equal(out.zwiftpower.missing.length, 1);
+  assert.equal(out.zwiftpower.missing[0].zwid, 11111);
+
+  const chad = out.riders[0];
+  assert.equal(chad.zpMatched, true);
+  assert.equal(chad.zpFtpW, 242);
+  assert.equal(chad.zpCategory, 'B');
+  assert.equal(chad.name, 'Chad D. Peddicord', "WTRL's name is kept");
+  assert.equal(chad.category, 'B', "WTRL's category is kept");
+  assert.equal(chad.categoryMismatch, false);
+
+  const unknown = out.riders[2];
+  assert.equal(unknown.zpMatched, false);
+  assert.equal(unknown.zpFtpW, undefined);
+});
+
+test('a WTRL category that disagrees with ZwiftPower is flagged', () => {
+  // Kyle races C in WTRL but sits in div 20 (B) on ZwiftPower — the real case
+  // that makes this join worth doing.
+  const base = {
+    teams: [{ teamName: 'T', trc: 1, riders: [{ name: 'Kyle Maloney', zwid: 6934646, category: 'C' }] }],
+    riders: [{ teamName: 'T', name: 'Kyle Maloney', zwid: 6934646, category: 'C' }]
+  };
+  const out = R.enrichWithZwiftPower(base, rosterRows, {});
+
+  assert.equal(out.riders[0].category, 'C');
+  assert.equal(out.riders[0].zpCategory, 'B');
+  assert.equal(out.riders[0].categoryMismatch, true);
+});
+
+test('enrichment reaches the nested teams as well as the flat rows', () => {
+  const base = {
+    teams: [{ teamName: 'T', trc: 1, riders: [{ name: 'Dan Klopfer', zwid: 1562251, category: 'B' }] }],
+    riders: [{ teamName: 'T', name: 'Dan Klopfer', zwid: 1562251, category: 'B' }]
+  };
+  const out = R.enrichWithZwiftPower(base, rosterRows, {});
+  assert.equal(out.teams[0].riders[0].zpSkill, 7174);
+  assert.equal(out.teams[0].riders[0].zpRole, 'Owner');
+  assert.equal(out.riders[0].zpSkill, 7174);
+});
+
+test('enrichment leaves an unenriched report untouched apart from the marker', () => {
+  const base = { teams: [], riders: [] };
+  const out = R.enrichWithZwiftPower(base, [], { teamId: 1 });
+  assert.equal(out.zwiftpower.rosterSize, 0);
+  assert.equal(out.zwiftpower.matched, 0);
+  assert.equal(out.riders.length, 0);
+});
+
+test('the enriched report carries raw ZwiftPower rows for its own riders only', () => {
+  const base = {
+    teams: [{ teamName: 'T', trc: 1, riders: [{ name: 'Chad', zwid: 38810, category: 'B' }] }],
+    riders: [{ teamName: 'T', name: 'Chad', zwid: 38810, category: 'B' }]
+  };
+  const out = R.enrichWithZwiftPower(base, rosterRows, { teamId: 11991 });
+
+  // Raw rows let a server redo the join without the extension's opinion.
+  assert.equal(out.zwiftpower.roster.length, 1);
+  assert.equal(out.zwiftpower.roster[0].zwid, 38810);
+  assert.equal(out.zwiftpower.roster[0].zpFtpW, 242);
+  assert.equal(out.zwiftpower.rosterSize, 5, 'the club is larger than the report');
+
+  // Club members who are not in the report are not shipped.
+  assert.equal(out.zwiftpower.roster.some((r) => r.zwid === 999999), false);
+  assert.equal(JSON.stringify(out).toLowerCase().includes('email'), false);
+});
+
+test('stripStats keeps the zwiftpower block while trimming rider fields', () => {
+  const context2 = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/report-format.js'), 'utf8'), context2);
+  const F = context2.WTRLFormat;
+
+  const base = {
+    teams: [{ teamName: 'T', trc: 1, riders: [{ name: 'Chad', zwid: 38810, category: 'B',
+      memberStatus: 'MEMBER', signedup: false, userId: 'u', tmuid: 1, teams: 0 }] }],
+    riders: [{ teamName: 'T', trc: 1, name: 'Chad', zwid: 38810, category: 'B',
+      memberStatus: 'MEMBER', signedup: false, userId: 'u', tmuid: 1, teams: 0 }]
+  };
+  const enriched = R.enrichWithZwiftPower(base, rosterRows, { teamId: 11991 });
+  const stripped = F.stripStats(enriched);
+
+  assert.equal(stripped.zwiftpower.teamId, 11991, 'the raw rows survive for the server');
+  assert.equal(stripped.zwiftpower.roster.length, 1);
+  assert.equal(stripped.riders[0].zpFtpW, undefined, 'per-rider extras are trimmed');
+  assert.equal(stripped.riders[0].zwid, 38810, 'the join key is still there');
+});

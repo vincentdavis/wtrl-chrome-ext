@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.6.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.7.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -89,6 +89,37 @@ are unaffected.
 Tick **Include rider stats** in the popup to keep category, zFTP, zMAP, points
 and race counts in the JSON/CSV export. The table always shows them — the toggle
 only changes what gets exported.
+
+## ZwiftPower roster enrichment
+
+In the report table, **Add ZwiftPower** pulls your club's ZwiftPower roster and
+matches it onto your riders. `zwid` is the same number on both sides, so this is
+an exact join — no name matching — and the whole club arrives in a single
+request rather than one per rider.
+
+Each rider gains their ZwiftPower **category**, FTP, weight, 20-minute and
+15-second w/kg, ranking and racing score, as new columns beside the WTRL ones.
+
+The point of putting them side by side is the disagreements. WTRL assigns ZRL
+categories from zFTP/zMAP; ZwiftPower ranks on its own results. When they differ
+the cell turns amber and says which is which — a rider sitting in your C team
+while ZwiftPower has them at B is exactly what you want to see before a race.
+The **Cat mismatch** tile filters to just those.
+
+The club ID is detected from your own ZwiftPower account, and can be overridden
+in Settings to pull a different club.
+
+Two things worth knowing about the data:
+
+- **Coverage is partial.** Across a real 2,084-member club, FTP was present for
+  2,053 riders but ranking for only 745 and 20-minute power for 1,189. Missing
+  readings show as `—`, never as `0`.
+- **Rider emails are never read.** The club roster payload carries an `email`
+  field for every member. It is dropped at the bridge and appears nowhere in the
+  report, the exports or the upload.
+
+A rider who is on a WTRL team but not in the ZwiftPower club is reported, not
+silently skipped.
 
 ## Race power profiles
 
@@ -177,7 +208,23 @@ open, or opening one in the background and closing it again.
       "tmuid": 457469,
       "teams": 0
     }
-  ]
+  ],
+
+  // Present only after "Add ZwiftPower". `roster` holds the raw ZwiftPower rows
+  // for riders in this report, keyed by zwid, so a server can redo the join
+  // itself rather than trusting the extension's.
+  "zwiftpower": {
+    "teamId": 11991,
+    "teamName": "COALITION",
+    "fetchedAt": "2026-10-19T09:00:00.000Z",
+    "rosterSize": 2084,
+    "matched": 6,
+    "missing": [],
+    "roster": [
+      { "zwid": 38810, "zpCategory": "B", "zpFtpW": 242, "zpWeightKg": 76.2,
+        "zpRank": 240.83, "zpSkill": 7062, "zp20minWkg": 3.5, "zp15sWkg": 8.5 }
+    ]
+  }
 }
 ```
 
@@ -317,7 +364,7 @@ step is needed to run it.
 | `src/background.js`     | Service worker: downloads, upload, API key custody              |
 | `src/settings.js`       | Settings schema shared by the worker, popup and options page    |
 | `src/results.*`         | The report table: search, filter, sort, group, refresh          |
-| `src/race-format.js`    | WTRL↔ZwiftPower join, power curves, career bests — unit-tested  |
+| `src/race-format.js`    | ZwiftPower joins: roster enrichment, power curves — unit-tested |
 | `src/race-content.js`   | Content script on the WTRL results page                         |
 | `src/race.*`            | The race power table                                            |
 | `src/zp-bridge.js`      | Content script on zwiftpower.com, fetches with your session     |
@@ -347,6 +394,15 @@ Every other push uploads the same zip as a build artifact.
 **"No teams found on this page."** You need to be on
 <https://www.wtrl.racing/zrl/myteams/> and signed in. If the page is still
 loading the accordion, wait a moment and press **Build report** again.
+
+**Add ZwiftPower can't work out my club.** It reads the club from the "Team"
+link on your signed-in ZwiftPower page. If your account has no club, or you want
+a different one, set the ID in Settings → ZwiftPower.
+
+**A rider has no ZwiftPower columns.** They are not in the club roster, which is
+listed after enrichment. Blank individual cells mean ZwiftPower simply has no
+reading for them — ranking and power are only populated for a fraction of a
+typical club.
 
 **Power says ZwiftPower refused the request.** ZwiftPower returns `403` without
 a session. Open <https://zwiftpower.com>, sign in, and press **Power** again.

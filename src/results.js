@@ -24,6 +24,17 @@ const COLUMNS = [
   { key: 'teams', label: 'Teams', type: 'number', align: 'right' }
 ];
 
+/** Appended once a report has been enriched from ZwiftPower. */
+const ZP_COLUMNS = [
+  { key: 'zpCategory', label: 'ZP cat', type: 'text', align: 'center', zp: true },
+  { key: 'zpFtpW', label: 'ZP FTP', type: 'number', align: 'right', zp: true },
+  { key: 'zpWeightKg', label: 'ZP kg', type: 'number', align: 'right', zp: true },
+  { key: 'zp20minWkg', label: 'ZP 20m w/kg', type: 'number', align: 'right', zp: true },
+  { key: 'zp15sWkg', label: 'ZP 15s w/kg', type: 'number', align: 'right', zp: true },
+  { key: 'zpRank', label: 'ZP rank', type: 'number', align: 'right', zp: true },
+  { key: 'zpSkill', label: 'ZP score', type: 'number', align: 'right', zp: true }
+];
+
 const state = {
   report: null,
   multiTeam: new Set(),
@@ -35,7 +46,8 @@ const state = {
     status: '',
     signup: '',
     races: '',
-    multiOnly: false
+    multiOnly: false,
+    mismatchOnly: false
   },
   grouped: true
 };
@@ -134,7 +146,7 @@ function renderLiveState() {
 
   // Kicking off a second run while one is genuinely in flight would fight over
   // the report; an interrupted one should be recoverable.
-  [$('refresh'), $('retryFailed')].forEach((button) => {
+  [$('refresh'), $('retryFailed'), $('enrich')].forEach((button) => {
     if (button) button.disabled = building;
   });
 }
@@ -181,7 +193,20 @@ function renderTiles() {
   const container = $('tiles');
   container.innerHTML = '';
 
-  TILES.forEach((tile) => {
+  const tiles = TILES.slice();
+  if (hasZwiftPower()) {
+    const riders = state.report.riders || [];
+    summary.zpMatched = riders.filter((r) => r.zpMatched).length;
+    summary.catMismatch = riders.filter((r) => r.categoryMismatch).length;
+    tiles.push({ key: 'zpMatched', label: 'On ZwiftPower' });
+    tiles.push({
+      key: 'catMismatch', label: 'Cat mismatch',
+      filter: { mismatchOnly: true }, tone: 'warn'
+    });
+  }
+  $('mismatchWrap').hidden = !hasZwiftPower();
+
+  tiles.forEach((tile) => {
     const value = summary[tile.key];
     const el = document.createElement(tile.filter ? 'button' : 'div');
     el.className = 'stat' + (tile.tone ? ' ' + tile.tone : '') + (tile.filter ? ' clickable' : '');
@@ -199,10 +224,61 @@ function renderTiles() {
   });
 }
 
+// ============================================================== enrichment ===
+
+async function enrich() {
+  const button = $('enrich');
+  if (button.disabled) return;
+  button.disabled = true;
+
+  try {
+    setRefreshStatus('Asking ZwiftPower for your club roster…');
+    const res = await chrome.runtime.sendMessage({ type: 'zp-team-roster' });
+
+    if (!res || !res.ok) {
+      setRefreshStatus((res && res.error) || 'Could not load the ZwiftPower roster.', 'error');
+      return;
+    }
+
+    const rows = (res.data && res.data.data) || [];
+    const enriched = WTRLRace.enrichWithZwiftPower(state.report, rows, {
+      teamId: res.teamId ?? null,
+      teamName: res.teamName ?? null
+    });
+
+    await chrome.runtime.sendMessage({ type: 'store-report', report: enriched });
+    await loadReport();
+    syncControls();
+
+    const zp = enriched.zwiftpower;
+    const missed = zp.missing.length;
+    setRefreshStatus(
+      `Matched ${zp.matched} of ${enriched.riderCount} riders against ZwiftPower club ` +
+        `${zp.teamId} (${zp.rosterSize} members)` +
+        (missed ? ` — ${missed} not in the club.` : '.'),
+      missed ? 'warn' : 'ok'
+    );
+  } catch (error) {
+    setRefreshStatus(
+      'Enrichment failed: ' + (error && error.message ? error.message : error),
+      'error'
+    );
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('enrich').addEventListener('click', enrich);
+
 // =================================================================== table ===
 
+function hasZwiftPower() {
+  return !!(state.report && state.report.zwiftpower);
+}
+
 function visibleColumns() {
-  return COLUMNS.filter((column) => !(state.grouped && column.hideWhenGrouped));
+  const base = COLUMNS.concat(hasZwiftPower() ? ZP_COLUMNS : []);
+  return base.filter((column) => !(state.grouped && column.hideWhenGrouped));
 }
 
 function renderHead() {
@@ -247,6 +323,7 @@ function matches(rider) {
   if (f.races === 'none' && rider.appearancesSeason) return false;
   if (f.races === 'some' && !rider.appearancesSeason) return false;
   if (f.multiOnly && !state.multiTeam.has(rider.zwid)) return false;
+  if (f.mismatchOnly && !rider.categoryMismatch) return false;
   return true;
 }
 
@@ -296,6 +373,17 @@ function cellFor(rider, column) {
     link.rel = 'noreferrer noopener';
     link.textContent = value ?? '';
     td.appendChild(link);
+    return td;
+  }
+
+  if (column.key === 'zpCategory') {
+    const pill = document.createElement('span');
+    pill.className = 'pill ' + (rider.categoryMismatch ? 'pill-warn' : 'pill-ok');
+    pill.textContent = value || '—';
+    if (rider.categoryMismatch) {
+      pill.title = `WTRL has ${rider.category}, ZwiftPower has ${value}`;
+    }
+    td.appendChild(pill);
     return td;
   }
 
@@ -383,7 +471,10 @@ function escapeHtml(value) {
 // ================================================================ controls ===
 
 function resetFilters() {
-  state.filters = { search: '', team: '', status: '', signup: '', races: '', multiOnly: false };
+  state.filters = {
+    search: '', team: '', status: '', signup: '', races: '',
+    multiOnly: false, mismatchOnly: false
+  };
 }
 
 function syncControls() {
@@ -393,6 +484,7 @@ function syncControls() {
   $('signupFilter').value = state.filters.signup;
   $('racesFilter').value = state.filters.races;
   $('multiOnly').checked = state.filters.multiOnly;
+  $('mismatchOnly').checked = state.filters.mismatchOnly;
   $('groupByTeam').checked = state.grouped;
 }
 
@@ -418,6 +510,10 @@ $('racesFilter').addEventListener('change', (e) => {
 });
 $('multiOnly').addEventListener('change', (e) => {
   state.filters.multiOnly = e.target.checked;
+  render();
+});
+$('mismatchOnly').addEventListener('change', (e) => {
+  state.filters.mismatchOnly = e.target.checked;
   render();
 });
 $('groupByTeam').addEventListener('change', (e) => {
@@ -501,7 +597,7 @@ async function waitForContentScript(tabId, timeoutMs = 30000) {
  * the teams that failed and fold them into the existing report.
  */
 async function runOnMyTeamsTab(kind, labels) {
-  const buttons = [$('refresh'), $('retryFailed')];
+  const buttons = [$('refresh'), $('retryFailed'), $('enrich')];
   if (buttons.some((b) => b && b.disabled)) return;
   buttons.forEach((b) => b && (b.disabled = true));
 

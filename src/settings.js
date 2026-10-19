@@ -8,7 +8,8 @@ export const DEFAULTS = {
   autoUpload: false,
   includeStats: false,
   endpointTemplate: null,
-  requestTimeoutSeconds: 30
+  requestTimeoutSeconds: 30,
+  zwiftPowerTeamId: null
 };
 
 export async function getSettings() {

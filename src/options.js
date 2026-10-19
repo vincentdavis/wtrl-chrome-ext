@@ -32,6 +32,7 @@ async function load() {
   $('autoUpload').checked = settings.autoUpload;
   $('endpointTemplate').value = settings.endpointTemplate || '';
   $('requestTimeoutSeconds').value = settings.requestTimeoutSeconds;
+  $('zwiftPowerTeamId').value = settings.zwiftPowerTeamId || '';
 
   await refreshPermissionState();
 }
@@ -105,6 +106,32 @@ $('saveCollection').addEventListener('click', async () => {
   }
   await setSettings({ requestTimeoutSeconds: seconds });
   showNote('collectionStatus', `Timeout set to ${seconds}s.`, 'ok');
+});
+
+$('saveZwiftPower').addEventListener('click', async () => {
+  const raw = $('zwiftPowerTeamId').value.trim();
+  if (raw && !/^\d+$/.test(raw)) {
+    showNote('zwiftPowerStatus', 'Team ID must be a number, or blank to detect it.', 'error');
+    return;
+  }
+  await setSettings({ zwiftPowerTeamId: raw ? Number(raw) : null });
+  showNote(
+    'zwiftPowerStatus',
+    raw ? `Using ZwiftPower club ${raw}.` : 'Will detect your club automatically.',
+    'ok'
+  );
+});
+
+$('detectTeam').addEventListener('click', async () => {
+  showNote('zwiftPowerStatus', 'Asking ZwiftPower…', null);
+  const res = await chrome.runtime.sendMessage({ type: 'zp-my-team' });
+  if (!res || !res.ok) {
+    showNote('zwiftPowerStatus', (res && res.error) || 'Could not detect your club.', 'error');
+    return;
+  }
+  $('zwiftPowerTeamId').value = res.teamId;
+  await setSettings({ zwiftPowerTeamId: res.teamId });
+  showNote('zwiftPowerStatus', `Detected and saved club ${res.teamId}.`, 'ok');
 });
 
 $('saveTemplate').addEventListener('click', async () => {

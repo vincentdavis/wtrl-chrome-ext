@@ -60,6 +60,45 @@
     return pageFetch(`/cache3/profile/${encodeURIComponent(zwid)}_all.json`);
   }
 
+  /** Every member of a ZwiftPower club, in one request. */
+  function teamRoster(teamId) {
+    return pageFetch(`/cache3/teams/${encodeURIComponent(teamId)}_riders.json`);
+  }
+
+  /**
+   * The signed-in user's own club and Zwift id, read from the site nav.
+   *
+   * The navbar's "Team" and "Profile" links point at that user's own team and
+   * profile, so the ids can be lifted straight out of them. Other team links on
+   * the page belong to the event listings, hence the exact-text match.
+   */
+  function ownContext() {
+    const findId = (label, param) => {
+      const link = [...document.querySelectorAll('a')].find((a) => {
+        const text = (a.textContent || '').trim().toLowerCase();
+        const href = a.getAttribute('href') || '';
+        return text === label && new RegExp(param + '=\\d+').test(href);
+      });
+      if (!link) return null;
+      const match = (link.getAttribute('href') || '').match(new RegExp(param + '=(\\d+)'));
+      return match ? Number(match[1]) : null;
+    };
+
+    const teamId = findId('team', 'id');
+    const zwid = findId('profile', 'z');
+    const teamLink = [...document.querySelectorAll('a')].find(
+      (a) => (a.textContent || '').trim().toLowerCase() === 'team'
+    );
+
+    return {
+      ok: !!teamId,
+      teamId,
+      zwid,
+      teamName: teamLink ? (teamLink.getAttribute('title') || '').trim() || null : null,
+      error: teamId ? null : 'No team found on your ZwiftPower account — set the team id in Settings.'
+    };
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === 'zp-ping') {
       sendResponse({ ok: true, origin: window.location.origin });
@@ -72,6 +111,14 @@
     if (message?.type === 'zp-rider-history') {
       riderHistory(message.zwid).then(sendResponse);
       return true; // async
+    }
+    if (message?.type === 'zp-team-roster') {
+      teamRoster(message.teamId).then(sendResponse);
+      return true; // async
+    }
+    if (message?.type === 'zp-my-team') {
+      sendResponse(ownContext());
+      return true;
     }
     return false;
   });

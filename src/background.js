@@ -145,6 +145,58 @@ async function viaZwiftPower(message) {
   }
 }
 
+/**
+ * Fetch the club roster, working out which club if the caller did not say.
+ *
+ * Preference order: an explicit id, then the id saved in Settings, then the
+ * club on the signed-in ZwiftPower account. Both steps share one borrowed tab.
+ */
+async function resolveRoster(explicitTeamId) {
+  const slot = await ensureZwiftPowerTab();
+  if (slot.error) return { ok: false, error: slot.error };
+
+  try {
+    let teamId = explicitTeamId;
+    let teamName = null;
+
+    if (!teamId) {
+      const stored = await chrome.storage.local.get(['zwiftPowerTeamId']);
+      teamId = stored.zwiftPowerTeamId || null;
+    }
+
+    if (!teamId) {
+      const own = await chrome.tabs.sendMessage(slot.tabId, { type: 'zp-my-team' });
+      if (!own || !own.ok) {
+        return { ok: false, error: (own && own.error) || 'Could not work out your ZwiftPower team.' };
+      }
+      teamId = own.teamId;
+      teamName = own.teamName;
+    }
+
+    const result = await chrome.tabs.sendMessage(slot.tabId, { type: 'zp-team-roster', teamId });
+    if (!result || !result.ok) {
+      const status = result && result.status;
+      if (status === 403 || status === 401) {
+        return {
+          ok: false,
+          status,
+          error: 'ZwiftPower refused the request — open zwiftpower.com and sign in, then retry.'
+        };
+      }
+      return result || { ok: false, error: 'No response from ZwiftPower.' };
+    }
+    return Object.assign({}, result, { teamId, teamName });
+  } catch (error) {
+    return { ok: false, error: String(error && error.message ? error.message : error) };
+  } finally {
+    if (slot.opened) {
+      try {
+        await chrome.tabs.remove(slot.tabId);
+      } catch (_) {}
+    }
+  }
+}
+
 async function handleUpload(report) {
   const settings = await getSettings();
 
@@ -226,6 +278,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break;
         case 'zp-rider-history':
           sendResponse(await viaZwiftPower({ type: 'zp-rider-history', zwid: message.zwid }));
+          break;
+        case 'zp-team-roster':
+          sendResponse(await resolveRoster(message.teamId));
+          break;
+        case 'zp-my-team':
+          sendResponse(await viaZwiftPower({ type: 'zp-my-team' }));
           break;
         case 'open-race':
           sendResponse(await openPage('src/race.html'));
