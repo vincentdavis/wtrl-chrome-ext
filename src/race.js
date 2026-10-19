@@ -29,7 +29,7 @@ const TEAM_COLUMNS = [
   { key: 'teamName', label: 'Team', type: 'text' },
   { key: 'riderCount', label: 'Riders', type: 'number', align: 'right' },
   { key: 'matchedCount', label: 'Power', type: 'number', align: 'right' },
-  { key: 'points.total', label: 'Points', type: 'number', align: 'right' },
+  { key: 'points.total', label: 'Points', type: 'number', align: 'right', heat: true },
   { key: 'avg.avgWkg', label: 'Avg w/kg', type: 'number', align: 'right' },
   { key: 'avg.wkg20m', label: 'Avg 20m', type: 'number', align: 'right' },
   { key: 'avg.wkg5m', label: 'Avg 5m', type: 'number', align: 'right' },
@@ -57,10 +57,16 @@ const BASE_COLUMNS = [
     title: 'Points by position' },
   { key: 'totalPoints', label: 'Pts', type: 'number', align: 'right', heat: true,
     title: 'Total ZRL points for this race' },
-  { key: 'weightKg', label: 'kg', type: 'number', align: 'right' },
-  { key: 'raceFtpW', label: 'FTP W', type: 'number', align: 'right' },
-  { key: 'normalisedPowerW', label: 'NP', type: 'number', align: 'right' },
-  { key: 'avgWkg', label: 'Avg w/kg', type: 'number', align: 'right' }
+  // kg is shaded on request. Unlike the rest, its colour reads as magnitude,
+  // not merit — a heavier rider is not a better one.
+  { key: 'weightKg', label: 'kg', type: 'number', align: 'right', heat: true,
+    title: 'Weight — colour shows heavier vs lighter, not better vs worse' },
+  { key: 'raceFtpW', label: 'FTP W', type: 'number', align: 'right', heat: true,
+    title: 'FTP for this race, from ZwiftPower' },
+  { key: 'normalisedPowerW', label: 'NP', type: 'number', align: 'right', heat: true,
+    title: 'Normalised power' },
+  { key: 'avgWkg', label: 'Avg w/kg', type: 'number', align: 'right', heat: true,
+    title: 'Average watts per kilogram across the race' }
 ];
 
 const durations = () => (window.WTRLRace ? WTRLRace.DURATIONS : []);
@@ -394,11 +400,7 @@ function renderTeams() {
       state.teamSortDir;
   });
 
-  // Weight is shaded nowhere: higher is not better, so a colour scale on it
-  // would imply a ranking that does not exist.
-  const heatCols = TEAM_COLUMNS.filter(
-    (c) => /^(avg|best|median)\./.test(c.key) && !/weight/i.test(c.key)
-  );
+  const heatCols = TEAM_COLUMNS.filter((c) => c.heat || /^(avg|best|median)\./.test(c.key));
   const teamScales = new Map();
   heatCols.forEach((column) => {
     teamScales.set(column.key, WTRLHeat.scaleFor(sorted.map((t) => dig(t, column.key))));
