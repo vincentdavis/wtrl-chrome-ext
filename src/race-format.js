@@ -254,6 +254,61 @@
     });
   }
 
+  /**
+   * League standings for a division.
+   *
+   * WTRL serves this with single-letter keys. The mapping below was decoded by
+   * summing the per-race team points across every round and matching them
+   * against each field — e/k/i/pbp reconcile exactly with season FAL/FTS/FIN/PBP,
+   * and r1..r8 are the placing points per round, which sum to j.
+   */
+  function mapLeagueStandings(payload) {
+    const rows = (payload && payload.payload) || [];
+    return rows.map((row) => {
+      const roundPoints = [];
+      for (let i = 1; i <= 8; i += 1) {
+        const value = zpNum(row['r' + i]);
+        roundPoints.push(value === null ? 0 : value);
+      }
+      const fal = zpNum(row.e);
+      const fts = zpNum(row.k);
+      const fin = zpNum(row.i);
+      const pbp = zpNum(row.pbp);
+
+      return {
+        rank: zpNum(row.c),
+        teamId: row.teamId || null,
+        teamName: row.d || null,
+        jersey: row.z || null,
+        roundPoints,
+        roundsRaced: zpNum(row.l),
+        leaguePoints: zpNum(row.n) ?? zpNum(row.j),
+        leaguePointsBeforePenalty: zpNum(row.j),
+        penalty: zpNum(row.m),
+        falPoints: fal,
+        ftsPoints: fts,
+        finPoints: fin,
+        pbpPoints: pbp,
+        // WTRL does not send a season race-points total; it is the four parts.
+        racePoints: [fal, fts, fin, pbp].every((v) => v === null)
+          ? null
+          : [fal, fts, fin, pbp].reduce((n, v) => n + (v || 0), 0)
+      };
+    });
+  }
+
+  /** How many rounds any team in the division has actually raced. */
+  function roundsPlayed(standings) {
+    let played = 0;
+    (standings || []).forEach((row) => {
+      row.roundPoints.forEach((value, i) => {
+        if (value) played = Math.max(played, i + 1);
+      });
+      if (row.roundsRaced) played = Math.max(played, row.roundsRaced);
+    });
+    return played;
+  }
+
   /** The Zwift event id shared by every rider row, if they agree on one. */
   function eventIdFrom(payload) {
     const ids = new Set(
@@ -558,6 +613,8 @@
   }
 
   root.WTRLRace = {
+    mapLeagueStandings,
+    roundsPlayed,
     wtrlTeams,
     teamAggregates,
     DIVISIONS,

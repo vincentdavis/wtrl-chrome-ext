@@ -57,6 +57,8 @@ const state = {
 async function load() {
   $('version').textContent = 'v' + chrome.runtime.getManifest().version;
   await loadReport();
+  WTRLNav.mount(document.getElementById('navHost'), 'roster');
+
 }
 
 /** Read the stored report and render it, preserving any active filters. */

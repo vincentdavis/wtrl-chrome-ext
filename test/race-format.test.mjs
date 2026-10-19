@@ -531,3 +531,63 @@ test('points reach the CSV export', () => {
   assert.equal(rows[0].falPoints, 85);
   assert.equal(rows[0].totalPoints, 100);
 });
+
+// ------------------------------------------------------- league standings ---
+
+const leaguePayload = fixture('race-league.json');
+
+test('mapLeagueStandings decodes WTRL single-letter league fields', () => {
+  const rows = R.mapLeagueStandings(leaguePayload);
+  assert.equal(rows.length, 4);
+
+  const dirt = rows[0];
+  assert.equal(dirt.rank, 1);
+  assert.equal(dirt.teamName, 'DIRT OG');
+  assert.equal(dirt.teamId, '5949');
+  assert.equal(dirt.roundsRaced, 3);
+  assert.equal(dirt.leaguePoints, 17);
+  // Decoded by reconciling against the summed race results.
+  assert.equal(dirt.falPoints, 546);
+  assert.equal(dirt.ftsPoints, 134);
+  assert.equal(dirt.finPoints, 225);
+  assert.equal(dirt.pbpPoints, 48);
+});
+
+test('round points sum to the league total', () => {
+  R.mapLeagueStandings(leaguePayload).forEach((row) => {
+    const sum = row.roundPoints.reduce((a, b) => a + b, 0);
+    assert.equal(
+      sum,
+      row.leaguePointsBeforePenalty,
+      `${row.teamName}: rounds ${row.roundPoints.join('+')} should equal ${row.leaguePointsBeforePenalty}`
+    );
+  });
+});
+
+test('a penalty is applied to the standing, not hidden', () => {
+  const penalised = R.mapLeagueStandings(leaguePayload).find((r) => r.teamName === 'Penalised Team');
+  assert.equal(penalised.leaguePointsBeforePenalty, 8);
+  assert.equal(penalised.penalty, 2);
+  assert.equal(penalised.leaguePoints, 6, 'the standing shows points after the penalty');
+});
+
+test('season race points are the four components added up', () => {
+  const dirt = R.mapLeagueStandings(leaguePayload)[0];
+  assert.equal(dirt.racePoints, 546 + 134 + 225 + 48);
+});
+
+test('roundsPlayed finds how far the season has got', () => {
+  assert.equal(R.roundsPlayed(R.mapLeagueStandings(leaguePayload)), 3);
+
+  // An unraced division should not claim any rounds.
+  const fresh = R.mapLeagueStandings({
+    payload: [{ c: 1, d: 'New', r1: '0', r2: '0', l: 0, j: 0, n: 0 }]
+  });
+  assert.equal(R.roundsPlayed(fresh), 0);
+});
+
+test('an empty league payload is handled', () => {
+  assert.deepEqual(R.mapLeagueStandings({ payload: [] }).length, 0);
+  assert.deepEqual(R.mapLeagueStandings({}).length, 0);
+  assert.equal(R.roundsPlayed([]), 0);
+});

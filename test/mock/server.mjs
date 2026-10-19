@@ -98,6 +98,13 @@ function mockStoredRace() {
     extensionVersion: '0.6.0-mock'
   });
 
+  report.league = context.WTRLRace.mapLeagueStandings(read('test/fixtures/race-league.json'));
+  // The race and league fixtures are independent; point two league rows at the
+  // teams in the race so the "in this race" highlight is visible in preview.
+  report.teams.forEach((team, i) => {
+    if (report.league[i]) report.league[i].teamName = team.teamName;
+  });
+
   return {
     generatedAt: report.generatedAt,
     race: report.race,

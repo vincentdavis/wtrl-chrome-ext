@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.12.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.13.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -153,6 +153,23 @@ is visible rather than misleading.
 **Export view (CSV)** follows the toggle: team aggregates in team view, riders
 in rider view.
 
+### League table
+
+A third tab holds the division's **season standings**, fetched alongside the
+race. Rank, rounds raced, the league points from each round, the running total,
+any penalty, and the season FAL / FTS / FIN / PBP totals — all shaded like the
+rest. Teams that appear in the race you are looking at are badged *in this race*
+so your own division reads at a glance.
+
+Only rounds that have actually been raced get a column, so an early season does
+not show a wall of empty ones.
+
+WTRL serves this endpoint with single-letter keys (`c`, `d`, `e`, `i`, `j`,
+`k`…). The mapping was worked out by summing the per-race team points across
+every round and matching them against each field, and the tests assert the
+reconciliations that pin it down — round points summing to the league total, and
+`e`/`k`/`i`/`pbp` matching season FAL/FTS/FIN/PBP.
+
 ### Colours
 
 Each column is shaded on its own scale — a 5s w/kg and a 20m w/kg are not
@@ -213,6 +230,24 @@ Riders with no ZwiftPower row are listed in a banner and kept in the table
 anyone without a session, and an extension's own requests don't carry one. The
 extension borrows a `zwiftpower.com` tab instead — reusing one you already have
 open, or opening one in the background and closing it again.
+
+## Getting around
+
+Every extension page carries the same navigation bar: **Team roster**, **Race
+power**, links out to **My Teams** and **Results** on WTRL, and **Settings**.
+Each report shows what it currently holds and how old it is — "2 teams, 9 riders
+· 12m ago" — so the nav answers "have I collected this yet?" rather than leading
+to an empty page.
+
+The toolbar popup mirrors it, with the two reports under *Reports* and the
+collection entry points under *Collect*.
+
+| To get here | Do this |
+| --- | --- |
+| Team roster | **Report** button on My Teams, or the nav / popup |
+| Race power | **Power** button on a Results page, or the nav / popup |
+| League table | The third tab inside Race power |
+| Settings | Nav bar, popup, or either on-page panel |
 
 ## Output
 

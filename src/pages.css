@@ -147,6 +147,11 @@ label.check {
   cursor: pointer;
 }
 
+/* `display: flex` above beats the [hidden] attribute, so say it explicitly. */
+label.check[hidden] {
+  display: none;
+}
+
 label.check input {
   accent-color: var(--accent);
   width: 15px;
@@ -269,3 +274,69 @@ code {
   border-radius: 4px;
   padding: 1px 5px;
 }
+
+/* ------------------------------------------------------------ page nav --- */
+
+.wtrl-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 16px;
+  background: #11141a;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.nav-item:hover:not(.active) {
+  background: var(--bg-soft);
+  border-color: var(--line);
+}
+
+.nav-item.active {
+  background: var(--bg-soft);
+  border-color: var(--accent);
+  cursor: default;
+}
+
+.nav-label {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.nav-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.nav-item.nav-empty .nav-label { color: var(--muted); }
+
+.nav-spacer { flex: 1; }
+
+.nav-link {
+  align-self: center;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-soft);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nav-link:hover { color: var(--text); border-color: #3d4553; }
+.nav-link.active { border-color: var(--accent); color: var(--text); }

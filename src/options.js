@@ -23,6 +23,7 @@ function currentApiSettings() {
 
 async function load() {
   $('version').textContent = 'v' + chrome.runtime.getManifest().version;
+  WTRLNav.mount(document.getElementById('navHost'), 'settings');
 
   const settings = await getSettings();
   $('apiBaseUrl').value = settings.apiBaseUrl;

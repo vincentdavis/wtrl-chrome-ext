@@ -4,6 +4,7 @@ import { getSettings, setSettings } from './settings.js';
 
 const $ = (id) => document.getElementById(id);
 const MYTEAMS_URL = 'https://www.wtrl.racing/zrl/myteams/';
+const RESULTS_URL = 'https://www.wtrl.racing/zrl/results/';
 
 let activeTabId = null;
 let lastReport = null;
@@ -51,8 +52,22 @@ async function init() {
     setSettings({ includeStats: event.target.checked });
   });
 
-  const stored = await chrome.storage.local.get(['lastReport']);
+  const stored = await chrome.storage.local.get(['lastReport', 'lastRace']);
   renderLastReport(stored.lastReport);
+
+  // The race report is independent of the roster, so say whether it exists.
+  const race = stored.lastRace;
+  if (race && race.report) {
+    const meta = race.race || {};
+    $('raceHint').textContent =
+      `Race power: ${meta.class || 'division'} round ${meta.round ?? '?'}, ` +
+      `${race.matchedCount}/${race.riderCount} riders with power.`;
+    $('race').disabled = false;
+  } else {
+    $('raceHint').textContent =
+      'No race collected yet — open a race on WTRL Results and press Power.';
+    $('race').disabled = true;
+  }
 
   const tab = await activeTab();
   if (!tab) {
@@ -104,6 +119,17 @@ $('run').addEventListener('click', async () => {
 
 $('open').addEventListener('click', () => {
   chrome.tabs.create({ url: MYTEAMS_URL });
+  window.close();
+});
+
+$('openResults').addEventListener('click', () => {
+  chrome.tabs.create({ url: RESULTS_URL });
+  window.close();
+});
+
+$('race').addEventListener('click', () => {
+  chrome.runtime.sendMessage({ type: 'open-race' });
+  window.close();
 });
 
 $('options').addEventListener('click', () => chrome.runtime.openOptionsPage());

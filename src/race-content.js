@@ -17,6 +17,8 @@
 
   const VERSION = chrome.runtime.getManifest().version;
 
+  const pending = new Map();
+
   const state = {
     resultsUrl: null,
     resultsPayload: null,
@@ -29,7 +31,18 @@
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
     const msg = event.data;
-    if (!msg || msg.__wtrlReport !== true || msg.kind !== 'results-data') return;
+    if (!msg || msg.__wtrlReport !== true) return;
+
+    if (msg.kind === 'fetch-result') {
+      const resolve = pending.get(msg.id);
+      if (resolve) {
+        pending.delete(msg.id);
+        resolve(msg);
+      }
+      return;
+    }
+
+    if (msg.kind !== 'results-data') return;
 
     // Whatever the page last loaded is the race the user is looking at.
     state.resultsUrl = msg.url || null;
@@ -54,6 +67,27 @@
     } catch (_) {
       return {};
     }
+  }
+
+  /** Same-origin fetch through the MAIN-world helper, as the page itself. */
+  function pageFetch(path) {
+    return new Promise((resolve) => {
+      const id = 'race-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        resolve({ ok: false, error: 'Timed out' });
+      }, 20000);
+
+      pending.set(id, (result) => {
+        clearTimeout(timer);
+        resolve(result);
+      });
+
+      window.postMessage(
+        { __wtrlReportCmd: true, kind: 'fetch', id, url: path, expect: 'json' },
+        window.location.origin
+      );
+    });
   }
 
   // ===================================================================== UI ===
@@ -219,7 +253,20 @@
       const zpRows = (zp.data && zp.data.data) || [];
       log(`ZwiftPower returned ${zpRows.length} riders for this event.`);
 
-      setProgress(75, 'Matching riders…');
+      // Season standings for the same division, for the league view.
+      setProgress(60, 'Fetching league standings…');
+      let standings = [];
+      if (meta.season && meta.class) {
+        const lg = await pageFetch(`/api/zrl/league/${meta.season}/${meta.class}`);
+        if (lg.ok && lg.data) {
+          standings = WTRLRace.mapLeagueStandings(lg.data);
+          log(`League standings: ${standings.length} teams.`);
+        } else {
+          log(`League standings unavailable (${(lg && lg.error) || 'no response'}).`);
+        }
+      }
+
+      setProgress(80, 'Matching riders…');
       const report = WTRLRace.buildRaceReport({
         wtrlPayload: state.resultsPayload,
         zpRows,
@@ -227,6 +274,7 @@
         extensionVersion: VERSION
       });
 
+      report.league = standings;
       state.lastRace = report;
       await chrome.runtime.sendMessage({ type: 'store-race', report });
 

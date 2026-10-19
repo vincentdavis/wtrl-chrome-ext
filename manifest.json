@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "WTRL ZRL Team Report",
   "short_name": "WTRL Report",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "description": "Collect every rider from all of your WTRL ZRL teams into one JSON/CSV report, and push it to the Coalition team app.",
   "icons": {
     "16": "icons/icon16.png",

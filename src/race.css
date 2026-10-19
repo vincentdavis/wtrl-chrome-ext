@@ -173,3 +173,19 @@ td.heat.best::after {
 }
 
 .palette-note.unsafe { color: var(--warn); }
+
+/* ------------------------------------------------------------- league ----- */
+
+tbody tr.in-race td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+td.penalty {
+  color: var(--accent-soft);
+  font-weight: 650;
+}
+
+.viewtab:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

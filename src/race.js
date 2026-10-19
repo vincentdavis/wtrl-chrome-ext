@@ -14,6 +14,8 @@ const state = {
   view: 'rider',          // 'rider' | 'team'
   teamSort: 'position',
   teamSortDir: 1,
+  leagueSort: 'rank',
+  leagueSortDir: 1,
   expanded: new Set()
 };
 
@@ -41,6 +43,53 @@ const TEAM_COLUMNS = [
 ];
 
 const dig = (obj, path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+
+/**
+ * League table: the division's season standings.
+ *
+ * The per-round columns are built from however many rounds have been raced,
+ * so an early season does not show a wall of empty columns.
+ */
+function leagueColumns() {
+  const rounds = WTRLRace.roundsPlayed(state.report ? state.report.league : []);
+  const roundCols = [];
+  for (let i = 0; i < rounds; i += 1) {
+    roundCols.push({
+      key: 'round.' + i,
+      label: 'R' + (i + 1),
+      type: 'number',
+      align: 'right',
+      heat: true,
+      round: i,
+      title: `League points from round ${i + 1}`
+    });
+  }
+
+  return [
+    { key: 'rank', label: '#', type: 'number', align: 'right' },
+    { key: 'teamName', label: 'Team', type: 'text' },
+    { key: 'roundsRaced', label: 'Raced', type: 'number', align: 'right' }
+  ]
+    .concat(roundCols)
+    .concat([
+      { key: 'leaguePoints', label: 'League pts', type: 'number', align: 'right', heat: true,
+        title: 'Standing points, after any penalty' },
+      { key: 'penalty', label: 'Pen', type: 'number', align: 'right',
+        title: 'Points deducted' },
+      { key: 'falPoints', label: 'FAL', type: 'number', align: 'right', heat: true,
+        title: 'Season first-across-the-line points' },
+      { key: 'ftsPoints', label: 'FTS', type: 'number', align: 'right', heat: true,
+        title: 'Season fastest-through-segment points' },
+      { key: 'finPoints', label: 'FIN', type: 'number', align: 'right', heat: true,
+        title: 'Season finish points' },
+      { key: 'pbpPoints', label: 'PBP', type: 'number', align: 'right', heat: true },
+      { key: 'racePoints', label: 'Race pts', type: 'number', align: 'right', heat: true,
+        title: 'FAL + FTS + FIN + PBP across the season' }
+    ]);
+}
+
+const leagueValue = (row, column) =>
+  column.round !== undefined ? row.roundPoints[column.round] : dig(row, column.key);
 
 const BASE_COLUMNS = [
   { key: 'position', label: '#', type: 'number', align: 'right' },
@@ -101,6 +150,7 @@ function valueFor(rider, column) {
 
 async function load() {
   $('version').textContent = 'v' + chrome.runtime.getManifest().version;
+  WTRLNav.mount(document.getElementById('navHost'), 'race');
 
   const stored = await chrome.storage.local.get(['lastRace', 'heatPalette']);
   if (stored.heatPalette && WTRLHeat.paletteNames().includes(stored.heatPalette)) {
@@ -131,6 +181,11 @@ async function load() {
       `${missed.length} rider(s) have no ZwiftPower row for this event and so have no power data: ` +
       missed.map((u) => u.name).join(', ') + '.';
   }
+
+  $('viewLeague').disabled = !(state.report.league || []).length;
+  $('viewLeague').title = $('viewLeague').disabled
+    ? 'No league standings collected for this division'
+    : 'Season standings for this division';
 
   buildFilters();
   renderTiles();
@@ -183,6 +238,7 @@ function renderTiles() {
 // =================================================================== table ===
 
 function renderHead() {
+  if (state.view === 'league') return renderLeagueHead();
   if (state.view === 'team') return renderTeamHead();
   const row = $('head');
   row.innerHTML = '';
@@ -257,6 +313,7 @@ function paintHeat(td, scale, value) {
 }
 
 function render() {
+  if (state.view === 'league') return renderLeague();
   if (state.view === 'team') return renderTeams();
   const rows = (state.report.riders || []).filter(matches);
   const sorted = sortRows(rows);
@@ -320,6 +377,110 @@ function render() {
         paintHeat(td, scales.get(column.key), value);
         if (p && p.best) td.classList.add('best');
         td.textContent = typeof value === 'number' ? value.toFixed(state.showWatts ? 0 : 1) : '—';
+      } else {
+        if (scales.has(column.key)) paintHeat(td, scales.get(column.key), value);
+        td.textContent = value === null || value === undefined || value === '' ? '—' : value;
+      }
+      tr.appendChild(td);
+    });
+
+    body.appendChild(tr);
+  });
+}
+
+function renderLeagueHead() {
+  const row = $('head');
+  row.innerHTML = '';
+  leagueColumns().forEach((column) => {
+    const th = document.createElement('th');
+    th.className = 'sortable' + (column.align ? ' align-' + column.align : '');
+    th.textContent =
+      column.label + (state.leagueSort === column.key ? (state.leagueSortDir === 1 ? ' ▲' : ' ▼') : '');
+    if (column.title) th.title = column.title;
+    if (state.leagueSort === column.key) th.classList.add('sorted');
+    th.addEventListener('click', () => {
+      if (state.leagueSort === column.key) state.leagueSortDir *= -1;
+      else {
+        state.leagueSort = column.key;
+        state.leagueSortDir = column.type === 'number' ? -1 : 1;
+      }
+      renderLeagueHead();
+      renderLeague();
+    });
+    row.appendChild(th);
+  });
+}
+
+function renderLeague() {
+  const cols = leagueColumns();
+  const body = $('body');
+  body.innerHTML = '';
+
+  const search = state.filters.search.toLowerCase();
+  const rows = (state.report.league || []).filter(
+    (r) => !search || String(r.teamName || '').toLowerCase().includes(search)
+  );
+
+  $('count').textContent = `${rows.length} teams`;
+
+  if (!rows.length) {
+    body.innerHTML =
+      `<tr><td class="empty-row" colspan="${cols.length}">` +
+      (state.report.league && state.report.league.length
+        ? 'No team matches that search.'
+        : 'No league standings were collected for this division. Rebuild from the results page.') +
+      '</td></tr>';
+    return;
+  }
+
+  const sorted = rows.slice().sort((a, b) => {
+    const column = cols.find((c) => c.key === state.leagueSort) || cols[0];
+    const av = leagueValue(a, column);
+    const bv = leagueValue(b, column);
+    if (column.type === 'number') {
+      const an = typeof av === 'number' ? av : null;
+      const bn = typeof bv === 'number' ? bv : null;
+      if (an === null && bn === null) return 0;
+      if (an === null) return 1;
+      if (bn === null) return -1;
+      return (an - bn) * state.leagueSortDir;
+    }
+    return String(av ?? '').localeCompare(String(bv ?? ''), undefined, { sensitivity: 'base' }) *
+      state.leagueSortDir;
+  });
+
+  const scales = new Map();
+  cols.filter((c) => c.heat).forEach((column) => {
+    scales.set(column.key, WTRLHeat.scaleFor(sorted.map((r) => leagueValue(r, column))));
+  });
+
+  // Which teams appear in the race on screen, so ours stand out in the table.
+  const inThisRace = new Set((state.report.teams || []).map((t) => t.teamName));
+
+  sorted.forEach((row) => {
+    const tr = document.createElement('tr');
+    if (inThisRace.has(row.teamName)) tr.className = 'in-race';
+
+    cols.forEach((column) => {
+      const td = document.createElement('td');
+      if (column.align) td.className = 'align-' + column.align;
+      const value = leagueValue(row, column);
+
+      if (column.key === 'teamName') {
+        td.className = 'rider-cell';
+        const span = document.createElement('span');
+        span.className = 'rider-name';
+        span.textContent = value || '—';
+        td.appendChild(span);
+        if (inThisRace.has(row.teamName)) {
+          const badge = document.createElement('span');
+          badge.className = 'badge';
+          badge.textContent = 'in this race';
+          td.appendChild(badge);
+        }
+      } else if (column.key === 'penalty') {
+        td.textContent = value ? '-' + value : '';
+        if (value) td.classList.add('penalty');
       } else {
         if (scales.has(column.key)) paintHeat(td, scales.get(column.key), value);
         td.textContent = value === null || value === undefined || value === '' ? '—' : value;
@@ -585,17 +746,25 @@ function setView(view) {
   state.view = view;
   $('viewTeam').classList.toggle('active', view === 'team');
   $('viewRider').classList.toggle('active', view === 'rider');
-  // Rider-only controls make no sense against team rows.
+  $('viewLeague').classList.toggle('active', view === 'league');
+
+  // Rider-only controls make no sense against team or league rows.
   ['matchedOnly', 'showWatts'].forEach((id) => {
     const label = $(id).closest('label');
-    if (label) label.hidden = view === 'team';
+    if (label) label.hidden = view !== 'rider';
   });
+  // The league table is season-wide, so per-race filters do not apply to it.
+  [$('teamFilter'), $('catFilter')].forEach((el) => {
+    if (el) el.hidden = view === 'league';
+  });
+
   renderHead();
   render();
 }
 
 $('viewTeam').addEventListener('click', () => setView('team'));
 $('viewRider').addEventListener('click', () => setView('rider'));
+$('viewLeague').addEventListener('click', () => setView('league'));
 
 // ================================================================ controls ===
 
