@@ -25,6 +25,19 @@ const COLUMNS = [
 ];
 
 /** Appended once a report has been enriched from ZwiftPower. */
+const ZR_COLUMNS = [
+  { key: 'zrVelo', label: 'vELO', type: 'number', align: 'right', zr: true },
+  { key: 'zrPhenotype', label: 'Type', type: 'text', align: 'center', zr: true },
+  { key: 'zrSprint', label: 'Sprint', type: 'number', align: 'right', zr: true },
+  { key: 'zrPunch', label: 'Punch', type: 'number', align: 'right', zr: true },
+  { key: 'zrClimb', label: 'Climb', type: 'number', align: 'right', zr: true },
+  { key: 'zrTimeTrial', label: 'TT', type: 'number', align: 'right', zr: true },
+  { key: 'zrPursuit', label: 'Pursuit', type: 'number', align: 'right', zr: true },
+  { key: 'zrEndurance', label: 'Endur', type: 'number', align: 'right', zr: true },
+  { key: 'zrWins', label: 'Wins', type: 'number', align: 'right', zr: true },
+  { key: 'zrPodiums', label: 'Podiums', type: 'number', align: 'right', zr: true }
+];
+
 const ZP_COLUMNS = [
   { key: 'zpCategory', label: 'ZP cat', type: 'text', align: 'center', zp: true },
   { key: 'zpFtpW', label: 'ZP FTP', type: 'number', align: 'right', zp: true },
@@ -148,7 +161,7 @@ function renderLiveState() {
 
   // Kicking off a second run while one is genuinely in flight would fight over
   // the report; an interrupted one should be recoverable.
-  [$('refresh'), $('retryFailed'), $('enrich')].forEach((button) => {
+  [$('refresh'), $('retryFailed'), $('enrich'), $('enrichZr')].forEach((button) => {
     if (button) button.disabled = building;
   });
 }
@@ -272,14 +285,83 @@ async function enrich() {
 
 $('enrich').addEventListener('click', enrich);
 
+/**
+ * ZwiftRacing for the whole roster.
+ *
+ * Unlike the ZwiftPower club roster, which arrives in one request, this is one
+ * request per rider — so the button says how many it is about to make and the
+ * status keeps counting, rather than appearing to hang.
+ */
+async function enrichZwiftRacing() {
+  const button = $('enrichZr');
+  if (button.disabled || !state.report) return;
+
+  const zwids = [
+    ...new Set((state.report.riders || []).map((r) => Number(r.zwid)).filter(Boolean))
+  ];
+  if (!zwids.length) {
+    setRefreshStatus('No Zwift ids in this report to look up.', 'error');
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    setRefreshStatus(
+      `Fetching ${zwids.length} riders from ZwiftRacing, one request each — this takes a while…`,
+      'warn'
+    );
+    const res = await chrome.runtime.sendMessage({ type: 'zr-riders', zwids });
+
+    const mapped = ((res && res.riders) || []).map((r) => WTRLZR.mapRider(r)).filter(Boolean);
+    if (!mapped.length) {
+      setRefreshStatus(
+        (res && res.error) || 'ZwiftRacing returned nothing — are you signed in at zwiftracing.app?',
+        'error'
+      );
+      return;
+    }
+
+    const enriched = WTRLZR.enrich(state.report, mapped, {
+      requested: zwids.length,
+      failures: (res && res.failures) || []
+    });
+
+    await chrome.runtime.sendMessage({ type: 'store-report', report: enriched });
+    await loadReport();
+    syncControls();
+
+    const zr = enriched.zwiftracing;
+    setRefreshStatus(
+      `ZwiftRacing: matched ${zr.matched} of ${zr.requested}` +
+        (zr.missing.length ? ` — ${zr.missing.length} have no profile.` : '.'),
+      zr.missing.length ? 'warn' : 'ok'
+    );
+  } catch (error) {
+    setRefreshStatus(
+      'ZwiftRacing failed: ' + (error && error.message ? error.message : error),
+      'error'
+    );
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('enrichZr').addEventListener('click', enrichZwiftRacing);
+
 // =================================================================== table ===
 
 function hasZwiftPower() {
   return !!(state.report && state.report.zwiftpower);
 }
 
+function hasZwiftRacing() {
+  return !!(state.report && state.report.zwiftracing);
+}
+
 function visibleColumns() {
-  const base = COLUMNS.concat(hasZwiftPower() ? ZP_COLUMNS : []);
+  const base = COLUMNS
+    .concat(hasZwiftPower() ? ZP_COLUMNS : [])
+    .concat(hasZwiftRacing() ? ZR_COLUMNS : []);
   return base.filter((column) => !(state.grouped && column.hideWhenGrouped));
 }
 
@@ -599,7 +681,7 @@ async function waitForContentScript(tabId, timeoutMs = 30000) {
  * the teams that failed and fold them into the existing report.
  */
 async function runOnMyTeamsTab(kind, labels) {
-  const buttons = [$('refresh'), $('retryFailed'), $('enrich')];
+  const buttons = [$('refresh'), $('retryFailed'), $('enrich'), $('enrichZr')];
   if (buttons.some((b) => b && b.disabled)) return;
   buttons.forEach((b) => b && (b.disabled = true));
 

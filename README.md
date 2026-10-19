@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.14.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.15.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -89,6 +89,38 @@ are unaffected.
 Tick **Include rider stats** in the popup to keep category, zFTP, zMAP, points
 and race counts in the JSON/CSV export. The table always shows them — the toggle
 only changes what gets exported.
+
+## ZwiftRacing.app
+
+**Add ZwiftRacing** pulls each rider's vELO rating and vELO2 factors from
+zwiftracing.app and joins them on `zwid` — their `riderId` is the Zwift id, so
+again no name matching. It is on both the race table and the roster.
+
+Each rider gains:
+
+- **vELO** rating, with 30- and 90-day peaks
+- **vELO2 factors** out of 1000: sprint, punch, climb, time trial, pursuit and
+  endurance — the six from the site's Factors panel
+- **Phenotype** (sprinter, climber, puncheur, pursuiter, tt), with the scores
+  behind it on hover
+- **Race record**: finishes, wins, podiums
+- Weight, height, and ZwiftRacing's own power curve with **percentile ranks**,
+  which ZwiftPower does not give
+
+Two things shape how this works:
+
+- **One request per rider.** There is no usable bulk endpoint —
+  `/api/riders?club=…` serves the site's own page but refuses an extension
+  fetch — so a race of 25 riders is 25 requests and a 200-rider roster is 200.
+  Requests are paced and retried with backoff, the roster button warns before
+  starting, and the race button is the one to reach for most of the time.
+- **It needs you signed in to zwiftracing.app**, like the others. The rider
+  JSON is served only with an `x-nextjs-data` header and only to a session;
+  `/api/riders/<zwid>` answers 403 regardless.
+
+The site is a Next.js app whose data URL embeds a build id that changes on
+every deploy, so the extension reads that id from the live page each time
+rather than hardcoding it.
 
 ## ZwiftPower roster enrichment
 
@@ -441,6 +473,7 @@ needs to implement.
 | ----------------------------- | ---------------------------------------------------------- |
 | `https://*.wtrl.racing/*`     | Read your teams and race results                            |
 | `https://zwiftpower.com/*`    | Read power data for a race, using your signed-in session    |
+| `https://zwiftracing.app/*`   | Read vELO ratings and factors, using your signed-in session |
 | `storage`                     | Settings, the learned endpoint template, the last report    |
 | `downloads`                   | Save the JSON/CSV file                                      |
 | `app.coalitionracing.com` *(optional)* | Only if you enable upload, only when you press Connect |
@@ -482,6 +515,8 @@ step is needed to run it.
 | `src/race-content.js`   | Content script on the WTRL results page                         |
 | `src/race.*`            | The race power table                                            |
 | `src/zp-bridge.js`      | Content script on zwiftpower.com, fetches with your session     |
+| `src/zr-format.js`      | ZwiftRacing mapping and join — unit-tested                      |
+| `src/zr-bridge.js`      | Content script on zwiftracing.app, reads the build id at runtime |
 | `src/popup.*`           | Toolbar popup: open/rebuild plus every export                   |
 | `src/options.*`         | Settings page                                                   |
 | `scripts/build.mjs`     | Dependency-free, reproducible ZIP packer                        |
@@ -517,6 +552,10 @@ a different one, set the ID in Settings → ZwiftPower.
 listed after enrichment. Blank individual cells mean ZwiftPower simply has no
 reading for them — ranking and power are only populated for a fraction of a
 typical club.
+
+**ZwiftRacing returns nothing.** Open <https://www.zwiftracing.app>, sign in,
+and try again — its rider data is only served to a session. If a single rider
+is missing, they have no ZwiftRacing profile; the status line counts those.
 
 **Power says ZwiftPower refused the request.** ZwiftPower returns `403` without
 a session. Open <https://zwiftpower.com>, sign in, and press **Power** again.

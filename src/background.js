@@ -197,6 +197,80 @@ async function resolveRoster(explicitTeamId) {
   }
 }
 
+// -------------------------------------------------------- ZwiftRacing ------
+
+const ZWIFTRACING_PATTERNS = ['https://www.zwiftracing.app/*', 'https://zwiftracing.app/*'];
+const ZWIFTRACING_HOME = 'https://www.zwiftracing.app/';
+
+/** Borrow a zwiftracing.app tab, for the same reason as ZwiftPower. */
+async function ensureZwiftRacingTab() {
+  const existing = await chrome.tabs.query({ url: ZWIFTRACING_PATTERNS });
+  for (const tab of existing) {
+    try {
+      const pong = await chrome.tabs.sendMessage(tab.id, { type: 'zr-ping' });
+      if (pong && pong.ok && pong.buildId) return { tabId: tab.id, opened: false };
+    } catch (_) {}
+  }
+
+  const tab = await chrome.tabs.create({ url: ZWIFTRACING_HOME, active: false });
+  const deadline = Date.now() + 30000;
+  while (Date.now() < deadline) {
+    await sleep(500);
+    try {
+      const pong = await chrome.tabs.sendMessage(tab.id, { type: 'zr-ping' });
+      if (pong && pong.ok && pong.buildId) return { tabId: tab.id, opened: true };
+    } catch (_) {}
+  }
+  try {
+    await chrome.tabs.remove(tab.id);
+  } catch (_) {}
+  return { error: 'Could not open ZwiftRacing. Open zwiftracing.app, sign in, and try again.' };
+}
+
+/**
+ * Fetch riders from ZwiftRacing in chunks.
+ *
+ * One request per rider is unavoidable — there is no working bulk endpoint —
+ * so the work is split into chunks with a pause between, and the caller polls
+ * for progress rather than waiting blind on one long call.
+ */
+async function zwiftRacingRiders(zwids) {
+  const slot = await ensureZwiftRacingTab();
+  if (slot.error) return { ok: false, error: slot.error };
+
+  const CHUNK = 10;
+  const riders = [];
+  const failures = [];
+
+  try {
+    for (let i = 0; i < zwids.length; i += CHUNK) {
+      const chunk = zwids.slice(i, i + CHUNK);
+      const result = await chrome.tabs.sendMessage(slot.tabId, { type: 'zr-riders', zwids: chunk });
+
+      if (result && Array.isArray(result.riders)) riders.push(...result.riders);
+      if (result && Array.isArray(result.failures)) failures.push(...result.failures);
+
+      // A sign-in failure repeats for every rider; stop immediately.
+      if (result && result.aborted) {
+        return { ok: false, riders, failures, error: result.error };
+      }
+      if (i + CHUNK < zwids.length) await sleep(400);
+    }
+    return { ok: true, riders, failures, requested: zwids.length };
+  } catch (error) {
+    return {
+      ok: false, riders, failures,
+      error: String(error && error.message ? error.message : error)
+    };
+  } finally {
+    if (slot.opened) {
+      try {
+        await chrome.tabs.remove(slot.tabId);
+      } catch (_) {}
+    }
+  }
+}
+
 async function handleUpload(report) {
   const settings = await getSettings();
 
@@ -284,6 +358,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           break;
         case 'zp-my-team':
           sendResponse(await viaZwiftPower({ type: 'zp-my-team' }));
+          break;
+        case 'zr-riders':
+          sendResponse(await zwiftRacingRiders(message.zwids || []));
           break;
         case 'open-race':
           sendResponse(await openPage('src/race.html'));

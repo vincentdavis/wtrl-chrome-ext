@@ -91,7 +91,7 @@ function mockStoredRace() {
   const wtrlPayload = read('test/fixtures/race-wtrl-results.json');
   const zpRows = read('test/fixtures/race-zp-event.json').data;
 
-  const report = context.WTRLRace.buildRaceReport({
+  let report = context.WTRLRace.buildRaceReport({
     wtrlPayload,
     zpRows,
     race: { season: 20, class: '2120A10', round: 3 },
@@ -103,6 +103,27 @@ function mockStoredRace() {
   // teams in the race so the "in this race" highlight is visible in preview.
   report.teams.forEach((team, i) => {
     if (report.league[i]) report.league[i].teamName = team.teamName;
+  });
+
+  // ZwiftRacing enrichment, reusing the one real rider fixture for everyone.
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/zr-format.js'), 'utf8'), context);
+  const zrSeed = read('test/fixtures/zr-rider.json');
+  const zrRiders = report.riders.map((r, i) => {
+    const copy = JSON.parse(JSON.stringify(zrSeed));
+    copy.riderId = r.zwid;
+    copy.name = r.zpName || r.name;
+    const jitter = 1 - i * 0.07;
+    copy.race.rating = Math.round(zrSeed.race.rating * jitter);
+    copy.race.wins = Math.max(0, zrSeed.race.wins - i);
+    copy.race.podiums = Math.max(0, zrSeed.race.podiums - i);
+    ['sprint', 'punch', 'climb', 'timeTrial', 'pursuit', 'endurance'].forEach((f, n) => {
+      copy.velo.factors[f] = Math.round(zrSeed.velo.factors[f] * (1 - ((i + n) % 5) * 0.09));
+    });
+    copy.phenotype.label = ['sprinter', 'climber', 'puncheur', 'pursuiter', 'tt'][i % 5];
+    return copy;
+  }).filter((c) => c.riderId);
+  report = context.WTRLZR.enrich(report, zrRiders.map((r) => context.WTRLZR.mapRider(r)), {
+    requested: zrRiders.length
   });
 
   report.race = Object.assign({}, report.race, {

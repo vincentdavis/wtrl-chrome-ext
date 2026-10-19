@@ -120,6 +120,24 @@ const BASE_COLUMNS = [
 
 const durations = () => (window.WTRLRace ? WTRLRace.DURATIONS : []);
 
+/** Appended once a race has been enriched from ZwiftRacing.app. */
+const ZR_COLUMNS = [
+  { key: 'zrVelo', label: 'vELO', type: 'number', align: 'right', heat: true,
+    title: 'ZwiftRacing vELO rating' },
+  { key: 'zrPhenotype', label: 'Type', type: 'text', align: 'center',
+    title: 'ZwiftRacing rider phenotype — hover for the scores behind it' },
+  { key: 'zrSprint', label: 'Sprint', type: 'number', align: 'right', heat: true,
+    title: 'vELO2 sprint factor, out of 1000' },
+  { key: 'zrPunch', label: 'Punch', type: 'number', align: 'right', heat: true },
+  { key: 'zrClimb', label: 'Climb', type: 'number', align: 'right', heat: true },
+  { key: 'zrTimeTrial', label: 'TT', type: 'number', align: 'right', heat: true },
+  { key: 'zrPursuit', label: 'Pursuit', type: 'number', align: 'right', heat: true },
+  { key: 'zrEndurance', label: 'Endur', type: 'number', align: 'right', heat: true },
+  { key: 'zrFinishes', label: 'Races', type: 'number', align: 'right' },
+  { key: 'zrWins', label: 'Wins', type: 'number', align: 'right', heat: true },
+  { key: 'zrPodiums', label: 'Podiums', type: 'number', align: 'right', heat: true }
+];
+
 const POINTS_KEYS = ['falPoints', 'ftsPoints', 'finPoints', 'pbpPoints', 'totalPoints'];
 
 /** A TTT awards no rider points, so those columns are noise there. */
@@ -128,8 +146,14 @@ function pointsApply() {
   return WTRLRace.formatHasRiderPoints(fmt);
 }
 
+function hasZwiftRacing() {
+  return !!(state.report && state.report.zwiftracing);
+}
+
 function columns() {
   return BASE_COLUMNS.filter((c) => pointsApply() || !POINTS_KEYS.includes(c.key)).concat(
+    hasZwiftRacing() ? ZR_COLUMNS : []
+  ).concat(
     durations().map((d) => ({
       key: 'curve_' + d.key,
       label: d.label,
@@ -400,6 +424,22 @@ function render() {
           a.style.marginLeft = '8px';
           a.addEventListener('click', (e) => e.stopPropagation());
           td.appendChild(a);
+        }
+      } else if (column.key === 'zrPhenotype') {
+        if (value) {
+          const pill = document.createElement('span');
+          pill.className = 'pill pill-ok';
+          pill.textContent = value;
+          const scores = rider.zrPhenotypeScores;
+          if (scores) {
+            pill.title = Object.entries(scores)
+              .sort((a, b) => b[1] - a[1])
+              .map(([k, v]) => `${k} ${v}`)
+              .join(' · ');
+          }
+          td.appendChild(pill);
+        } else {
+          td.textContent = '—';
         }
       } else if (column.duration) {
         const p = curveAt(rider, column.duration);
@@ -698,6 +738,65 @@ function escapeHtml(value) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
   );
 }
+
+// ============================================================ ZwiftRacing ===
+
+async function addZwiftRacing() {
+  if (!state.report) return;
+  const button = $('addZr');
+  if (button.disabled) return;
+  button.disabled = true;
+
+  const zwids = [
+    ...new Set((state.report.riders || []).map((r) => Number(r.zwid)).filter(Boolean))
+  ];
+
+  if (!zwids.length) {
+    setPickerNote('No Zwift ids in this race to look up.', 'error');
+    button.disabled = false;
+    return;
+  }
+
+  try {
+    // One request per rider, so say how many and keep the count visible.
+    setPickerNote(`Fetching ${zwids.length} riders from ZwiftRacing…`, 'busy');
+    const res = await chrome.runtime.sendMessage({ type: 'zr-riders', zwids });
+
+    const mapped = ((res && res.riders) || []).map((r) => WTRLZR.mapRider(r)).filter(Boolean);
+    if (!mapped.length) {
+      setPickerNote(
+        (res && res.error) || 'ZwiftRacing returned nothing — are you signed in at zwiftracing.app?',
+        'error'
+      );
+      return;
+    }
+
+    const enriched = WTRLZR.enrich(state.report, mapped, {
+      requested: zwids.length,
+      failures: (res && res.failures) || []
+    });
+
+    await chrome.runtime.sendMessage({ type: 'store-race', report: enriched });
+    await load();
+
+    const zr = enriched.zwiftracing;
+    const missed = zr.missing.length;
+    setPickerNote(
+      `ZwiftRacing: matched ${zr.matched} of ${zr.requested}` +
+        (missed ? ` — ${missed} have no profile.` : '.'),
+      missed ? 'busy' : null
+    );
+  } catch (error) {
+    setPickerNote(
+      'ZwiftRacing failed: ' + (error && error.message ? error.message : error),
+      'error'
+    );
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('addZr').addEventListener('click', addZwiftRacing);
 
 // ============================================================= race picker ===
 
