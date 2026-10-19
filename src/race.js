@@ -47,6 +47,16 @@ const BASE_COLUMNS = [
   { key: 'name', label: 'Rider', type: 'text' },
   { key: 'zrlTeam', label: 'ZRL team', type: 'text' },
   { key: 'category', label: 'Cat', type: 'text', align: 'center' },
+  { key: 'falPoints', label: 'FAL', type: 'number', align: 'right', heat: true,
+    title: 'First across the line' },
+  { key: 'ftsPoints', label: 'FTS', type: 'number', align: 'right', heat: true,
+    title: 'Fastest through segment' },
+  { key: 'finPoints', label: 'FIN', type: 'number', align: 'right', heat: true,
+    title: 'Finish' },
+  { key: 'pbpPoints', label: 'PBP', type: 'number', align: 'right', heat: true,
+    title: 'Points by position' },
+  { key: 'totalPoints', label: 'Pts', type: 'number', align: 'right', heat: true,
+    title: 'Total ZRL points for this race' },
   { key: 'weightKg', label: 'kg', type: 'number', align: 'right' },
   { key: 'raceFtpW', label: 'FTP W', type: 'number', align: 'right' },
   { key: 'normalisedPowerW', label: 'NP', type: 'number', align: 'right' },
@@ -62,6 +72,7 @@ function columns() {
       label: d.label,
       type: 'number',
       align: 'right',
+      heat: true,
       duration: d.key
     }))
   );
@@ -174,6 +185,7 @@ function renderHead() {
     th.className = 'sortable' + (column.align ? ' align-' + column.align : '');
     th.textContent =
       column.label + (state.sortKey === column.key ? (state.sortDir === 1 ? ' ▲' : ' ▼') : '');
+    if (column.title) th.title = column.title;
     if (state.sortKey === column.key) th.classList.add('sorted');
     th.addEventListener('click', () => {
       if (state.sortKey === column.key) state.sortDir *= -1;
@@ -257,7 +269,7 @@ function render() {
 
   // One scale per column, built from the rows actually on screen.
   const scales = new Map();
-  cols.filter((c) => c.duration).forEach((column) => {
+  cols.filter((c) => c.heat).forEach((column) => {
     scales.set(column.key, WTRLHeat.scaleFor(sorted.map((r) => valueFor(r, column))));
   });
 
@@ -303,6 +315,7 @@ function render() {
         if (p && p.best) td.classList.add('best');
         td.textContent = typeof value === 'number' ? value.toFixed(state.showWatts ? 0 : 1) : '—';
       } else {
+        if (scales.has(column.key)) paintHeat(td, scales.get(column.key), value);
         td.textContent = value === null || value === undefined || value === '' ? '—' : value;
       }
       tr.appendChild(td);
@@ -457,7 +470,7 @@ function renderTeams() {
           displayName(rider),
           rider.category ?? '',
           rider.matched ? '✓' : '—',
-          '',
+          rider.totalPoints,
           rider.avgWkg,
           curveAt(rider, 1200)?.wkg,
           curveAt(rider, 300)?.wkg,

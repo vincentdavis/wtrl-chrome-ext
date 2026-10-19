@@ -23,7 +23,12 @@
           "activity": 2247802065466212400,
           "zpower": 1,
           "zwid": 0,
-          "dq": ""
+          "dq": "",
+          "falrp": 85,
+          "ftsrp": 3,
+          "finrp": 12,
+          "pbprp": 0,
+          "totrp": 100
         },
         {
           "p1": 2,
@@ -38,7 +43,12 @@
           "activity": 2247802065466212401,
           "zpower": 1,
           "zwid": 0,
-          "dq": ""
+          "dq": "",
+          "falrp": 50,
+          "ftsrp": 3,
+          "finrp": 6,
+          "pbprp": 0,
+          "totrp": 59
         },
         {
           "p1": 3,
@@ -53,15 +63,20 @@
           "activity": 2247802065466212402,
           "zpower": 1,
           "zwid": 0,
-          "dq": ""
+          "dq": "",
+          "falrp": 49,
+          "ftsrp": 0,
+          "finrp": 11,
+          "pbprp": 0,
+          "totrp": 60
         }
       ],
       "p1": 1,
-      "falp": 546,
-      "ftsp": 134,
-      "finp": 120,
-      "pbp": 28,
-      "totp": 828,
+      "falp": 184,
+      "ftsp": 6,
+      "finp": 29,
+      "pbp": 0,
+      "totp": 219,
       "timeResult": "0:58:42",
       "gap": "",
       "watts": 295,
@@ -85,7 +100,12 @@
           "activity": 2247802065466212403,
           "zpower": 1,
           "zwid": 0,
-          "dq": ""
+          "dq": "",
+          "falrp": 77,
+          "ftsrp": 18,
+          "finrp": 10,
+          "pbprp": 0,
+          "totrp": 105
         },
         {
           "p1": 5,
@@ -100,7 +120,12 @@
           "activity": 2247802065466212404,
           "zpower": 1,
           "zwid": 0,
-          "dq": ""
+          "dq": "",
+          "falrp": 14,
+          "ftsrp": 0,
+          "finrp": 3,
+          "pbprp": 0,
+          "totrp": 17
         },
         {
           "p1": 6,
@@ -115,15 +140,20 @@
           "activity": 2247802065466212405,
           "zpower": 1,
           "zwid": 0,
-          "dq": ""
+          "dq": "",
+          "falrp": 0,
+          "ftsrp": 0,
+          "finrp": 0,
+          "pbprp": 0,
+          "totrp": 0
         }
       ],
       "p1": 2,
-      "falp": 275,
-      "ftsp": 24,
-      "finp": 42,
+      "falp": 91,
+      "ftsp": 18,
+      "finp": 13,
       "pbp": 0,
-      "totp": 341,
+      "totp": 122,
       "timeResult": "0:59:15",
       "gap": "+33",
       "watts": 277,

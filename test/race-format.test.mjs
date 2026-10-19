@@ -456,8 +456,9 @@ test('team rows carry WTRL scoring beside the power averages', () => {
   const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
   const wind = report.teams.find((t) => t.teamName === 'Windriders');
   assert.equal(wind.position, 1);
-  assert.equal(wind.points.total, 828);
-  assert.equal(wind.points.fal, 546);
+  // The fixture's team row is the sum of its riders, as WTRL scores it.
+  assert.equal(wind.points.total, 219);
+  assert.equal(wind.points.fal, 184);
   assert.equal(wind.avg.wkg20m, 4.33, 'ZwiftPower average sits beside WTRL points');
 });
 
@@ -468,7 +469,7 @@ test('teamsToCsvRows flattens the team view for export', () => {
   assert.equal(rows.length, 2);
   assert.equal(rows[0].team, 'Windriders');
   assert.equal(rows[0].position, 1);
-  assert.equal(rows[0].pointsTotal, 828);
+  assert.equal(rows[0].pointsTotal, 219);
   assert.equal(rows[0].ridersWithPower, 3);
   assert.equal(rows[0].avgWkg20m, 4.33);
   assert.equal(rows[0].categories, '3A');
@@ -477,4 +478,56 @@ test('teamsToCsvRows flattens the team view for export', () => {
   const noPower = R.teamsToCsvRows(R.buildRaceReport({ wtrlPayload, zpRows: [], ...buildOpts }));
   assert.equal(noPower[0].avgWkg20m, '');
   assert.equal(noPower[0].ridersWithPower, 0);
+});
+
+// --------------------------------------------------------- per-rider points ---
+
+test('per-rider ZRL points come through from the results payload', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  const stefan = report.riders.find((r) => r.name === 'S. Joneström');
+
+  assert.equal(stefan.falPoints, 85, 'first across the line');
+  assert.equal(stefan.ftsPoints, 3, 'fastest through segment');
+  assert.equal(stefan.finPoints, 12, 'finish');
+  assert.equal(stefan.pbpPoints, 0);
+  assert.equal(stefan.totalPoints, 100);
+});
+
+test('rider points sum to the team row, as WTRL scores them', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+
+  report.teams.forEach((team) => {
+    if (!team.points || team.points.total === null) return;
+    const sum = (key) => team.riders.reduce((n, r) => n + (r[key] || 0), 0);
+    assert.equal(sum('falPoints'), team.points.fal, `${team.teamName} FAL`);
+    assert.equal(sum('ftsPoints'), team.points.fts, `${team.teamName} FTS`);
+    assert.equal(sum('finPoints'), team.points.fin, `${team.teamName} FIN`);
+    assert.equal(sum('totalPoints'), team.points.total, `${team.teamName} total`);
+  });
+});
+
+test('an unscored round reads as zero points, not missing', () => {
+  // WTRL returns 0 for every points field until a round is finalised.
+  const unscored = JSON.parse(JSON.stringify(wtrlPayload));
+  unscored.payload.forEach((t) =>
+    t.a.forEach((a) => {
+      a.falrp = 0; a.ftsrp = 0; a.finrp = 0; a.pbprp = 0; a.totrp = 0;
+    })
+  );
+  const report = R.buildRaceReport({ wtrlPayload: unscored, zpRows, ...buildOpts });
+  report.riders.forEach((r) => {
+    assert.equal(r.totalPoints, 0);
+    assert.notEqual(r.totalPoints, null, 'zero is a real score, not absence');
+  });
+});
+
+test('points reach the CSV export', () => {
+  const report = R.buildRaceReport({ wtrlPayload, zpRows, ...buildOpts });
+  const rows = R.raceToCsvRows(report);
+  const keys = Object.keys(rows[0]);
+  ['falPoints', 'ftsPoints', 'finPoints', 'pbpPoints', 'totalPoints'].forEach((k) => {
+    assert.ok(keys.includes(k), `CSV should carry ${k}`);
+  });
+  assert.equal(rows[0].falPoints, 85);
+  assert.equal(rows[0].totalPoints, 100);
 });

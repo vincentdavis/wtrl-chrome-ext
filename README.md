@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.10.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.11.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -180,6 +180,12 @@ imply a ranking that does not exist.
 ### Rider view
 
 Per rider:
+
+- **ZRL points** for the race — FAL (first across the line), FTS (fastest
+  through segment), FIN (finish), PBP and the total, shaded like the power
+  columns. These sum exactly to WTRL's team row, so team view reconciles with
+  the riders underneath it. A round that has not been finalised reports zero
+  across the board, which is WTRL's own answer rather than missing data.
 
 - **Power curve** at 5s, 15s, 30s, 1m, 2m, 5m and 20m, in w/kg or watts, shaded
   as a heatmap so a standout effort is visible down a column. ZwiftPower's own
