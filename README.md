@@ -14,7 +14,7 @@ WTRL ZRL team manager.
 
 Not on the Chrome Web Store — install it unpacked:
 
-1. Download `wtrl-zrl-team-report-v0.5.0.zip` from the
+1. Download `wtrl-zrl-team-report-v0.6.0.zip` from the
    [latest release](../../releases/latest) and unzip it.
 2. Open `chrome://extensions`.
 3. Turn on **Developer mode** (top-right toggle).
@@ -89,6 +89,40 @@ are unaffected.
 Tick **Include rider stats** in the popup to keep category, zFTP, zMAP, points
 and race counts in the JSON/CSV export. The table always shows them — the toggle
 only changes what gets exported.
+
+## Race power profiles
+
+On <https://www.wtrl.racing/zrl/results/>, pick a league, division and round,
+then press the **Power** button. You get every rider in that race with their
+ZwiftPower power curve beside their ZRL result.
+
+WTRL's results API zeroes out `zwid` and abbreviates names (`S. Joneström`), so
+it cannot be joined to ZwiftPower directly. What it does carry is `zid`, the
+Zwift event id — and ZwiftPower publishes the same event with real Zwift ids and
+full power data. So `zid` is the bridge, and riders are matched by surname plus
+first initial *within that one event*, which is a small enough pool to be
+reliable. On a real race this matched 18 of 19 riders; the one miss simply has no
+ZwiftPower row for that event, and is reported rather than guessed at.
+
+The table shows, per rider:
+
+- **Power curve** at 5s, 15s, 30s, 1m, 2m, 5m and 20m, in w/kg or watts. Values
+  are shaded against the field so a standout effort is visible down a column,
+  and ZwiftPower's own personal-best flag is marked with a star.
+- Weight, race FTP, normalised power, average w/kg, category, and whether the
+  rider is **verified** (ZADA).
+- Their ZRL team from WTRL, next to their club from ZwiftPower.
+- **Click any rider** for their career bests at every duration, fetched on
+  demand, with this race's numbers alongside — so you can see at a glance
+  whether someone just rode well above their own history.
+
+Riders with no ZwiftPower row are listed in a banner and kept in the table
+(greyed out) rather than dropped, so the field is never quietly incomplete.
+
+**This needs you signed in to ZwiftPower.** Its endpoints return `403` to
+anyone without a session, and an extension's own requests don't carry one. The
+extension borrows a `zwiftpower.com` tab instead — reusing one you already have
+open, or opening one in the background and closing it again.
 
 ## Output
 
@@ -244,7 +278,8 @@ needs to implement.
 
 | Permission                    | Why                                                        |
 | ----------------------------- | ---------------------------------------------------------- |
-| `https://*.wtrl.racing/*`     | Read your teams on the My Teams page                        |
+| `https://*.wtrl.racing/*`     | Read your teams and race results                            |
+| `https://zwiftpower.com/*`    | Read power data for a race, using your signed-in session    |
 | `storage`                     | Settings, the learned endpoint template, the last report    |
 | `downloads`                   | Save the JSON/CSV file                                      |
 | `app.coalitionracing.com` *(optional)* | Only if you enable upload, only when you press Connect |
@@ -282,6 +317,10 @@ step is needed to run it.
 | `src/background.js`     | Service worker: downloads, upload, API key custody              |
 | `src/settings.js`       | Settings schema shared by the worker, popup and options page    |
 | `src/results.*`         | The report table: search, filter, sort, group, refresh          |
+| `src/race-format.js`    | WTRL↔ZwiftPower join, power curves, career bests — unit-tested  |
+| `src/race-content.js`   | Content script on the WTRL results page                         |
+| `src/race.*`            | The race power table                                            |
+| `src/zp-bridge.js`      | Content script on zwiftpower.com, fetches with your session     |
 | `src/popup.*`           | Toolbar popup: open/rebuild plus every export                   |
 | `src/options.*`         | Settings page                                                   |
 | `scripts/build.mjs`     | Dependency-free, reproducible ZIP packer                        |
@@ -308,6 +347,13 @@ Every other push uploads the same zip as a build artifact.
 **"No teams found on this page."** You need to be on
 <https://www.wtrl.racing/zrl/myteams/> and signed in. If the page is still
 loading the accordion, wait a moment and press **Build report** again.
+
+**Power says ZwiftPower refused the request.** ZwiftPower returns `403` without
+a session. Open <https://zwiftpower.com>, sign in, and press **Power** again.
+
+**A rider has no power data.** They have no row in ZwiftPower for that event —
+usually no recorded activity, or ZwiftPower has not matched them to it. They stay
+in the table, greyed out, and are named in the banner.
 
 **The table says "Build was interrupted".** The WTRL tab was closed or navigated
 away mid-run. Everything collected up to that point is kept — press **Refresh**

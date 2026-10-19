@@ -23,6 +23,21 @@
 
   const ORIGIN = window.location.origin;
 
+  /**
+   * True for the ZRL results payload: { payload: [ { teamname, a: [riders] } ] }.
+   * Each rider row carries `zid`, the Zwift event id, which is the only usable
+   * join key — WTRL zeroes `zwid` out on this endpoint.
+   */
+  function looksLikeResultsPayload(data) {
+    return !!(
+      data &&
+      typeof data === 'object' &&
+      Array.isArray(data.payload) &&
+      data.payload.length &&
+      Array.isArray(data.payload[0].a)
+    );
+  }
+
   /** True for the team-detail JSON shape shown in the WTRL myteams flow. */
   function looksLikeTeamPayload(data) {
     return !!(
@@ -46,8 +61,11 @@
 
   function inspect(url, bodyText) {
     if (typeof bodyText !== 'string' || bodyText.length === 0) return;
+
     // Cheap pre-filter so we don't JSON.parse every page asset.
-    if (bodyText.indexOf('"riders"') === -1 || bodyText.indexOf('"trc"') === -1) return;
+    const maybeTeam = bodyText.indexOf('"riders"') > -1 && bodyText.indexOf('"trc"') > -1;
+    const maybeResults = bodyText.indexOf('"payload"') > -1 && bodyText.indexOf('"zid"') > -1;
+    if (!maybeTeam && !maybeResults) return;
 
     let data;
     try {
@@ -55,7 +73,11 @@
     } catch (_) {
       return;
     }
-    if (!looksLikeTeamPayload(data)) return;
+
+    let kind = null;
+    if (maybeTeam && looksLikeTeamPayload(data)) kind = 'team-data';
+    else if (maybeResults && looksLikeResultsPayload(data)) kind = 'results-data';
+    if (!kind) return;
 
     let absolute = url;
     try {
@@ -63,7 +85,7 @@
     } catch (_) {
       /* keep the raw value */
     }
-    emit({ kind: 'team-data', url: absolute, data });
+    emit({ kind, url: absolute, data });
   }
 
   // ---------------------------------------------------------------- fetch ---
@@ -189,7 +211,9 @@
           reply({ ok: false, status: response.status, error: 'Response was not JSON' });
           return;
         }
-        if (!looksLikeTeamPayload(data)) {
+        // `expect: 'json'` is used for ZwiftPower, whose payloads are neither
+        // of the WTRL shapes; the caller validates those itself.
+        if (msg.expect !== 'json' && !looksLikeTeamPayload(data)) {
           reply({ ok: false, status: response.status, error: 'Response was not a team payload' });
           return;
         }

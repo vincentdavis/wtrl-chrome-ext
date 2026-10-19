@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Race Power Profiles</title>
+    <link rel="stylesheet" href="pages.css" />
+    <link rel="stylesheet" href="results.css" />
+    <link rel="stylesheet" href="race.css" />
+  </head>
+  <body class="results">
+    <header>
+      <img src="../icons/icon48.png" alt="" />
+      <h1>Race Power</h1>
+      <span class="meta" id="raceMeta"></span>
+      <div class="header-actions">
+        <button id="exportCsv">Export view (CSV)</button>
+        <button id="exportJson">Export JSON</button>
+      </div>
+    </header>
+
+    <main>
+      <div class="note error" id="empty" hidden>
+        No race collected yet. Open a race on
+        <a href="https://www.wtrl.racing/zrl/results/" target="_blank" rel="noreferrer noopener">WTRL results</a>
+        and press <strong>Power</strong>.
+      </div>
+
+      <div class="note warn" id="unmatched" hidden></div>
+
+      <section class="tiles" id="tiles"></section>
+
+      <section class="toolbar">
+        <input type="search" id="search" placeholder="Search rider, team or Zwift id…" autocomplete="off" />
+        <select id="teamFilter" aria-label="Team"></select>
+        <select id="catFilter" aria-label="Category"></select>
+        <label class="check"><input type="checkbox" id="matchedOnly" checked /> Matched only</label>
+        <label class="check"><input type="checkbox" id="showWatts" /> Show watts</label>
+        <button id="reset">Reset</button>
+      </section>
+
+      <div class="result-count" id="count"></div>
+
+      <div class="table-wrap">
+        <table id="table">
+          <thead><tr id="head"></tr></thead>
+          <tbody id="body"></tbody>
+        </table>
+      </div>
+
+      <div class="career" id="career" hidden>
+        <div class="career-head">
+          <strong id="careerName"></strong>
+          <span class="meta" id="careerNote"></span>
+          <button id="careerClose" class="inline-btn">Close</button>
+        </div>
+        <div id="careerBody"></div>
+      </div>
+    </main>
+
+    <footer>
+      <span id="version"></span>
+      <span>Power from ZwiftPower · click a rider for career bests</span>
+    </footer>
+
+    <script src="race-format.js"></script>
+    <script src="report-format.js"></script>
+    <script type="module" src="race.js"></script>
+  </body>
+</html>

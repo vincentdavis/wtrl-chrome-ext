@@ -74,10 +74,36 @@ function mockStoredReport() {
   };
 }
 
+/** A joined race report, for previewing the race power table. */
+function mockStoredRace() {
+  const context = vm.createContext({});
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'src/race-format.js'), 'utf8'), context);
+
+  const read = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8'));
+  const wtrlPayload = read('test/fixtures/race-wtrl-results.json');
+  const zpRows = read('test/fixtures/race-zp-event.json').data;
+
+  const report = context.WTRLRace.buildRaceReport({
+    wtrlPayload,
+    zpRows,
+    race: { season: 20, class: '2120A10', round: 3 },
+    extensionVersion: '0.6.0-mock'
+  });
+
+  return {
+    generatedAt: report.generatedAt,
+    race: report.race,
+    riderCount: report.riderCount,
+    matchedCount: report.matchedCount,
+    report
+  };
+}
+
 /** Extension pages need chrome.* to exist before their module scripts run. */
 function injectShim(html) {
   const shim =
-    `<script>window.__MOCK_LAST_REPORT = ${JSON.stringify(mockStoredReport())};</script>` +
+    `<script>window.__MOCK_LAST_REPORT = ${JSON.stringify(mockStoredReport())};` +
+    `window.__MOCK_LAST_RACE = ${JSON.stringify(mockStoredRace())};</script>` +
     `<script src="/test/mock/chrome-shim.js"></script>`;
   return html.replace('</head>', shim + '</head>');
 }
